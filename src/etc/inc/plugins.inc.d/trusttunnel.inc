@@ -93,5 +93,35 @@ function trusttunnel_syslog()
     ];
 }
 
-// trusttunnel_devices() — Task 10.
+/**
+ * Register the `tt<N>` virtual TUN device pattern with the
+ * Interfaces -> Assignments dropdown. Mirrors wireguard_devices() and
+ * tailscale_devices(); the actual device is created by trusttunnel_client
+ * (a daemon-owned tun(4) on FreeBSD) so OPNsense's role is just
+ * surfacing it in the assignment UI.
+ */
+function trusttunnel_devices()
+{
+    return [
+        [
+            'configurable' => false,
+            'pattern'      => '^tt[0-9]+$',
+            'type'         => 'TrustTunnel',
+            'volatile'     => true,
+            'function'     => 'trusttunnel_prepare_interface',
+        ],
+    ];
+}
+
+/**
+ * Per-device hook invoked by Interfaces when a tt<N> entry is selected.
+ * For v1 there is no per-device prep (the daemon brings the iface up);
+ * keep as a no-op stub so the dispatcher can call it without warning.
+ */
+function trusttunnel_prepare_interface($iface)
+{
+    // intentionally no-op; trusttunnel_client(8) manages the tun device.
+    return null;
+}
+
 // trusttunnel_xmlrpc_sync() — Task 11.

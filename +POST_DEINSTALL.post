@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# Copyright (c) 2026 Mikhail Panyushkin <mpanius@gmail.com>
+# All rights reserved.
+# BSD-2-Clause — see LICENSE.
+#
+# Plugin uninstall hook — cleans up the plugin's runtime state and any
+# orphan firewall rules tagged <plugin_managed>os-trusttunnel</plugin_managed>.
+#
+# This complements the auto-generated +POST_DEINSTALL from Mk/plugins.mk
+# (which removes our installed files). We add the in-config.xml cleanup
+# here because plugin-managed rules are persisted into /conf/config.xml
+# (Codex finding #1) rather than rendered at runtime.
+
+set -eu
+
+# Strip any orphan firewall rules with our plugin_managed marker. Uses
+# /usr/local/bin/configctl which is always present on OPNsense.
+/usr/local/bin/php -r '
+require_once "/usr/local/etc/inc/config.inc";
+$cfg = OPNsense\Core\Config::getInstance();
+$cfg->lock();
+$root = $cfg->object();
+$removed = 0;
+if (isset($root->filter) && isset($root->filter->rule)) {
+    foreach ($root->filter->rule as $rule) {
+        if ((string)($rule->plugin_managed ?? "") === "os-trusttunnel") {
+            $dom = dom_import_simplexml($rule);
+            $dom->parentNode->removeChild($dom);
+            $removed++;
+        }
+    }
+}
+if ($removed > 0) {
+    $cfg->save();
+    echo "os-trusttunnel: removed $removed orphan firewall rule(s)\n";
+}
+$cfg->unlock();
+' 2>/dev/null || true
+
+# Remove the on-disk runtime directories. The rendered TOML files there
+# are derived state; removing them is safe.
+rm -rf /usr/local/etc/trusttunnel /var/log/trusttunnel || true
+
+exit 0

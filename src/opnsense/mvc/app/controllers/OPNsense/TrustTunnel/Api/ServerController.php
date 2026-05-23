@@ -66,15 +66,163 @@ class ServerController extends ApiMutableModelControllerBase
     // --- Set the whole server section --------------------------------------
 
     /**
-     * Override of set() to add post-save side-effects on the server section.
+     * Override of set() to manage the persistent <filter><rule> entry
+     * whose UUID is stored in <server><firewall_rule_uuid>.
      *
-     * Task 10 adds the firewall-rule sync here. For Task 6, this is just a
-     * pass-through that calls the parent to write config and returns.
+     * On enabled flip: create or refresh the auto-rule.
+     * On disabled flip: remove the auto-rule.
+     * On unchanged: re-sync dst/dst_port if listen_address changed.
      */
     public function setAction()
     {
-        // Pass through to parent set; firewall-rule sync wired in Task 10.
-        return parent::setAction();
+        $result = parent::setAction();
+        if (is_array($result) && isset($result['result']) && $result['result'] === 'saved') {
+            try {
+                $this->syncFirewallRule();
+            } catch (\Throwable $e) {
+                // Don't fail the user's save on firewall-sync hiccups —
+                // surface the issue but keep the model state intact.
+                $result['firewall_warning'] = $e->getMessage();
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Sync the auto-firewall rule. UUID is stored in
+     * <server><firewall_rule_uuid> and the rule itself is written into
+     * the legacy <filter><rule> list with a <plugin_managed>os-trusttunnel
+     * </plugin_managed> marker so we can find/refresh/delete it later.
+     *
+     * Closes Codex finding #1 (persistent rule, not runtime hook) and
+     * Claude should_fix #5 (UUID-based identity, not description prefix).
+     */
+    private function syncFirewallRule(): void
+    {
+        $mdl = $this->getModel();
+        $serverEnabled = (string)$mdl->server->enabled === '1';
+        $listen = (string)$mdl->server->listen_address;
+        $expectedUuid = trim((string)$mdl->server->firewall_rule_uuid);
+
+        // Parse listen_address -> (ip, port).
+        $port = 443;
+        $ip   = '0.0.0.0';
+        if ($listen !== '') {
+            if (strpos($listen, '[') === 0) {
+                $close = strpos($listen, ']');
+                if ($close !== false) {
+                    $ip   = substr($listen, 1, $close - 1);
+                    $port = (int)substr($listen, $close + 2);
+                }
+            } elseif (strpos($listen, ':') !== false) {
+                [$ip, $portStr] = explode(':', $listen, 2);
+                $port = (int)$portStr;
+            }
+        }
+
+        $cfg = \OPNsense\Core\Config::getInstance();
+        $cfg->lock();
+        try {
+            $root = $cfg->object();
+            if (!isset($root->filter)) {
+                $root->addChild('filter');
+            }
+            $filter = $root->filter;
+
+            // Collect all rules tagged plugin_managed=os-trusttunnel.
+            $existing = [];
+            foreach ($filter->rule as $rule) {
+                if ((string)($rule->plugin_managed ?? '') === 'os-trusttunnel') {
+                    $existing[] = $rule;
+                }
+            }
+
+            if (!$serverEnabled) {
+                foreach ($existing as $rule) {
+                    $this->removeXmlNode($filter, $rule);
+                }
+                $mdl->server->firewall_rule_uuid = '';
+                $mdl->serializeToConfig();
+                $cfg->save();
+                return;
+            }
+
+            // Server is enabled — find or create a matching rule.
+            $canonical = null;
+            $duplicates = [];
+            foreach ($existing as $rule) {
+                $uuid = (string)$rule['uuid'];
+                if ($expectedUuid !== '' && $uuid === $expectedUuid) {
+                    $canonical = $rule;
+                } else {
+                    $duplicates[] = $rule;
+                }
+            }
+            if ($canonical === null) {
+                // No UUID match — re-create. Drop ALL plugin_managed
+                // duplicates first to keep a single canonical row.
+                foreach ($duplicates as $rule) {
+                    $this->removeXmlNode($filter, $rule);
+                }
+                $duplicates = [];
+                $canonical = $filter->addChild('rule');
+                $newUuid   = $this->generateUuid();
+                $canonical->addAttribute('uuid', $newUuid);
+                $canonical->addChild('plugin_managed', 'os-trusttunnel');
+                $canonical->addChild('descr', 'Auto: TrustTunnel inbound (managed by os-trusttunnel; do not edit)');
+                $canonical->addChild('type', 'pass');
+                $canonical->addChild('interface', 'wan');
+                $canonical->addChild('ipprotocol', 'inet');
+                $canonical->addChild('protocol', 'tcp');
+                $src = $canonical->addChild('source');
+                $src->addChild('any', '1');
+                $dst = $canonical->addChild('destination');
+                if ($ip !== '' && $ip !== '0.0.0.0') {
+                    $dst->addChild('address', $ip);
+                } else {
+                    $dst->addChild('any', '1');
+                }
+                $dst->addChild('port', (string)$port);
+
+                $mdl->server->firewall_rule_uuid = $newUuid;
+            } else {
+                // Re-sync dst/dst_port; preserve user edits on other fields.
+                if (isset($canonical->destination)) {
+                    unset($canonical->destination);
+                }
+                $dst = $canonical->addChild('destination');
+                if ($ip !== '' && $ip !== '0.0.0.0') {
+                    $dst->addChild('address', $ip);
+                } else {
+                    $dst->addChild('any', '1');
+                }
+                $dst->addChild('port', (string)$port);
+            }
+
+            // Remove any extra plugin_managed rules — keep canonical only.
+            foreach ($duplicates as $rule) {
+                $this->removeXmlNode($filter, $rule);
+            }
+
+            $mdl->serializeToConfig();
+            $cfg->save();
+        } catch (\Throwable $e) {
+            $cfg->unlock();
+            throw $e;
+        }
+        $cfg->unlock();
+    }
+
+    /**
+     * Remove a SimpleXMLElement child from its parent. SimpleXML doesn't
+     * expose a clean remove API; the DOM detour is the canonical workaround.
+     */
+    private function removeXmlNode($parent, $child): void
+    {
+        $dom = dom_import_simplexml($child);
+        if ($dom !== null && $dom->parentNode !== null) {
+            $dom->parentNode->removeChild($dom);
+        }
     }
 
     // --- Service convenience: reconfigure ---------------------------------
