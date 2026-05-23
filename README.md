@@ -8,8 +8,12 @@ endpoint on one OPNsense router, joins it from another, and routes a LAN
 across the tunnel — asymmetric site-to-site in v1, full mesh planned for
 v2.
 
-Status: **early development (v1 in progress)** — see
-[`docs/`](docs/) for design and release docs.
+Status: **v1 functional** (server-side production-ready; client-side
+established `VPN_SS_CONNECTED` end-to-end on FreeBSD after porting ~30
+patches — see [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md)).
+Final data-plane polish in v1.0.1.
+
+See [`docs/`](docs/) for design, release, and patch documentation.
 
 ## Features (v1)
 
@@ -29,10 +33,15 @@ Status: **early development (v1 in progress)** — see
 
 ## Compatibility
 
-- OPNsense CE 25.x (FreeBSD 14.x base)
-- Companion binaries built from the `security/trusttunnel` and
-  `security/trusttunnel-client` FreeBSD ports shipped alongside this
-  plugin (`freebsd-port/security/` — built natively on FreeBSD 14)
+- OPNsense CE 25.x and 26.1.x (FreeBSD 14.x base)
+- Server binary (`trusttunnel_endpoint`) — built from
+  `security/trusttunnel` FreeBSD port. Upstream FreeBSD support merged in
+  TrustTunnel PR #28 (Feb 2026).
+- Client binary (`trusttunnel_client`) — built from
+  `security/trusttunnel-client` FreeBSD port with ~30 patches applied
+  to NativeLibsCommon, DnsLibs, and TrustTunnelClient source. Patches
+  documented in [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md);
+  upstream PRs pending.
 
 ## Install
 
