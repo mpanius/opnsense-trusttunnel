@@ -165,7 +165,12 @@ $(function () {
     });
 
     // --- Import flow: preview -> confirm (Codex finding #5 atomic save) ---
+    // Trust-gate binding (Claude must_fix #1): Confirm POSTs back the
+    // ORIGINAL URI string, not the parsed preview. Backend re-parses
+    // server-side via the same deeplink_parse.py and saves THAT result.
+    // Client cannot forge fields after preview.
     var __ttPreview = null;
+    var __ttUri = null;
 
     $('#ImportBtn').on('click', function (e) {
         e.preventDefault();
@@ -183,6 +188,7 @@ $(function () {
                 return;
             }
             __ttPreview = data.preview;
+            __ttUri = uri;
             $('#PrevName').text(__ttPreview.name || '—');
             $('#PrevHostname').text(__ttPreview.hostname || '—');
             $('#PrevAddresses').text((__ttPreview.addresses || []).join(', '));
@@ -196,15 +202,13 @@ $(function () {
 
     $('#ConfirmImportBtn').on('click', function (e) {
         e.preventDefault();
-        if (!__ttPreview) return;
+        if (!__ttUri) return;
         var $btn = $(this).prop('disabled', true);
-        // One atomic POST — backend creates row + sets active_server in
-        // a single Config lock (Codex finding #5).
         $.ajax({
             url: '/api/trusttunnel/deeplink/confirmImport',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify(__ttPreview),
+            data: JSON.stringify({uri: __ttUri}),
             success: function (data) {
                 $btn.prop('disabled', false);
                 if (data && data.status === 'ok' && data.uuid) {

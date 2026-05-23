@@ -79,38 +79,31 @@ class DeeplinkController extends ApiControllerBase
     }
 
     /**
-     * Parse a user-pasted tt://?... URI and return the decoded JSON
-     * preview (the trust gate). NEVER touches config.xml — this is a
-     * preview-only step.
+     * Run deeplink_parse.py with the URI as stdin and a hard wall-clock
+     * timeout that terminates the child if `proc_close` would otherwise
+     * block. Returns ['ok' => bool, 'data' => array, 'error' => string].
      *
-     * Closes Codex finding #4 (configd stdin not available in CE 25.x):
-     * invokes deeplink_parse.py via proc_open with a stdin pipe and an
-     * explicit timeout, so the URI never lands on argv.
-     * Closes Claude must_fix #2 + Codex finding #5: enforces 64 KB cap
-     * at the controller before the subprocess spawns.
+     * Closes Claude must_fix #2: stream_set_timeout only affects blocking
+     * reads, not proc_close. We enforce a real timeout via stream_select
+     * + proc_terminate; the webserver never blocks on a CPU-spinning child.
      */
-    public function previewAction()
+    private function runDeeplinkParse(string $uri, int $timeoutSec = 10): array
     {
-        if (!$this->request->isPost()) {
-            return ['status' => 'failed', 'error' => 'POST required'];
-        }
-        $uri = (string)$this->request->getPost('uri', '');
         if ($uri === '') {
-            return ['status' => 'failed', 'error' => 'uri is required'];
+            return ['ok' => false, 'error' => 'uri is required'];
         }
         if (strlen($uri) > 65536) {
-            $this->response->setStatusCode(413);
-            return ['status' => 'failed', 'error' => 'URI exceeds 64 KB cap'];
+            return ['ok' => false, 'error' => 'URI exceeds 64 KB cap', 'http' => 413];
         }
         if (strncmp($uri, 'tt://', 5) !== 0) {
-            return ['status' => 'failed', 'error' => "URI must start with 'tt://'"];
+            return ['ok' => false, 'error' => "URI must start with 'tt://'"];
         }
 
         $script = '/usr/local/opnsense/scripts/trusttunnel/deeplink_parse.py';
         $descspec = [
-            0 => ['pipe', 'r'],   // stdin: URI
-            1 => ['pipe', 'w'],   // stdout: JSON
-            2 => ['pipe', 'w'],   // stderr: error message
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
         ];
         $proc = @proc_open(
             ['/usr/local/bin/python3', $script],
@@ -120,73 +113,113 @@ class DeeplinkController extends ApiControllerBase
             ['LANG' => 'C.UTF-8']
         );
         if (!is_resource($proc)) {
-            return ['status' => 'failed', 'error' => 'cannot spawn deeplink_parse.py'];
+            return ['ok' => false, 'error' => 'cannot spawn deeplink_parse.py'];
         }
-
-        // Send URI via stdin; close to let the script EOF cleanly.
         @fwrite($pipes[0], $uri);
         @fclose($pipes[0]);
+        @stream_set_blocking($pipes[1], false);
+        @stream_set_blocking($pipes[2], false);
 
-        // 10 s read budget; if the process is slower than that, terminate.
-        stream_set_timeout($pipes[1], 10);
-        stream_set_timeout($pipes[2], 10);
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
+        $deadline = microtime(true) + $timeoutSec;
+        $stdout = '';
+        $stderr = '';
+        $killed = false;
+        while (true) {
+            $status = proc_get_status($proc);
+            // Drain any output ready now.
+            $chunk = stream_get_contents($pipes[1]);
+            if ($chunk !== false) { $stdout .= $chunk; }
+            $chunk = stream_get_contents($pipes[2]);
+            if ($chunk !== false) { $stderr .= $chunk; }
+            if (!$status['running']) {
+                break;
+            }
+            if (microtime(true) >= $deadline) {
+                // Hard kill the child; proc_close will then return quickly.
+                @proc_terminate($proc, 9);
+                $killed = true;
+                break;
+            }
+            usleep(50000);  // 50 ms
+        }
+        // Final drain.
+        $chunk = stream_get_contents($pipes[1]);
+        if ($chunk !== false) { $stdout .= $chunk; }
+        $chunk = stream_get_contents($pipes[2]);
+        if ($chunk !== false) { $stderr .= $chunk; }
         @fclose($pipes[1]);
         @fclose($pipes[2]);
         $rc = proc_close($proc);
 
+        if ($killed) {
+            return ['ok' => false, 'error' => 'parser timed out (10s)', 'http' => 504];
+        }
         if ($rc !== 0) {
-            $this->response->setStatusCode(400);
-            return [
-                'status' => 'failed',
-                'error'  => 'parser failed: ' . trim((string)$stderr),
-                'rc'     => $rc,
-            ];
+            return ['ok' => false, 'error' => 'parser failed: ' . trim($stderr), 'rc' => $rc];
         }
-        $decoded = json_decode((string)$stdout, true);
+        $decoded = json_decode($stdout, true);
         if (!is_array($decoded)) {
-            $this->response->setStatusCode(400);
-            return [
-                'status' => 'failed',
-                'error'  => 'parser produced non-JSON',
-                'raw'    => trim((string)$stdout),
-            ];
+            return ['ok' => false, 'error' => 'parser produced non-JSON', 'raw' => trim($stdout)];
         }
-        return [
-            'status'  => 'ok',
-            'preview' => $decoded,
-        ];
+        return ['ok' => true, 'data' => $decoded];
     }
 
     /**
-     * Atomically save the previewed payload as a new <client><servers><server>
-     * row AND set <client><active_server> to its uuid — in one
-     * transaction-style lock. Closes Codex finding #5 (avoids the two-POST
-     * flow where active points at non-existent uuid on partial failure).
+     * Parse a user-pasted URI and return decoded fields for the trust-gate
+     * modal. NEVER touches config.xml.
+     */
+    public function previewAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'error' => 'POST required'];
+        }
+        $uri = (string)$this->request->getPost('uri', '');
+        $r = $this->runDeeplinkParse($uri);
+        if (!$r['ok']) {
+            $this->response->setStatusCode($r['http'] ?? 400);
+            return ['status' => 'failed', 'error' => $r['error']];
+        }
+        return ['status' => 'ok', 'preview' => $r['data']];
+    }
+
+    /**
+     * Atomically save the URI-parsed payload as a new <client><servers><server>
+     * row AND set <client><active_server> to its uuid.
+     *
+     * Closes Claude must_fix #1 (trust-gate binding): the frontend posts the
+     * **URI** here, not the previewed JSON. We re-parse via the SAME
+     * deeplink_parse.py — what gets saved is what the parser produces from
+     * the URI bytes. Client cannot bypass the trust gate by forging fields.
      */
     public function confirmImportAction()
     {
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
         }
-        $payload = json_decode((string)$this->request->getRawBody(), true);
-        if (!is_array($payload)) {
-            $payload = $this->request->getPost();
+        $body = json_decode((string)$this->request->getRawBody(), true);
+        $uri = '';
+        if (is_array($body) && isset($body['uri'])) {
+            $uri = (string)$body['uri'];
+        } else {
+            $uri = (string)$this->request->getPost('uri', '');
         }
-        if (!is_array($payload) || !isset($payload['hostname'])) {
-            return ['status' => 'failed', 'error' => 'missing or invalid payload'];
+        $r = $this->runDeeplinkParse($uri);
+        if (!$r['ok']) {
+            $this->response->setStatusCode($r['http'] ?? 400);
+            return ['status' => 'failed', 'error' => $r['error']];
         }
+        $payload = $r['data'];
 
         // Defense-in-depth: re-validate the username regex on the server side.
         $username = isset($payload['username']) ? (string)$payload['username'] : '';
         if (!preg_match('/^[A-Za-z0-9._-]{1,64}$/', $username)) {
-            return ['status' => 'failed', 'error' => 'invalid username in payload'];
+            return ['status' => 'failed', 'error' => 'invalid username in parsed payload'];
         }
 
         $mdl = new \OPNsense\TrustTunnel\TrustTunnel();
         $cfg = \OPNsense\Core\Config::getInstance();
         $cfg->lock();
+        $newUuid = '';
         try {
             $srvNode = $mdl->client->servers->server->Add();
             $newUuid = $srvNode->getAttribute('uuid');
@@ -237,6 +270,7 @@ class DeeplinkController extends ApiControllerBase
             'status'         => 'ok',
             'uuid'           => $newUuid,
             'active_server'  => $newUuid,
+            'fingerprint_sha256' => $payload['fingerprint_sha256'] ?? '',
         ];
     }
 }
