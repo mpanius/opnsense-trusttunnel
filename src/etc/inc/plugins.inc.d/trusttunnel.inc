@@ -43,9 +43,9 @@ function trusttunnel_services()
     $services[] = [
         'description' => gettext('TrustTunnel Endpoint (server)'),
         'configd'     => [
-            'restart' => ['trusttunnel server.restart'],
-            'start'   => ['trusttunnel server.start'],
-            'stop'    => ['trusttunnel server.stop'],
+            'restart' => ['trusttunnel server restart'],
+            'start'   => ['trusttunnel server start'],
+            'stop'    => ['trusttunnel server stop'],
         ],
         'name'        => 'trusttunnel_endpoint',
         'pidfile'     => '/var/run/trusttunnel_endpoint.pid',
@@ -60,9 +60,9 @@ function trusttunnel_services()
     $services[] = [
         'description' => gettext('TrustTunnel Client'),
         'configd'     => [
-            'restart' => ['trusttunnel client.restart'],
-            'start'   => ['trusttunnel client.start'],
-            'stop'    => ['trusttunnel client.stop'],
+            'restart' => ['trusttunnel client restart'],
+            'start'   => ['trusttunnel client start'],
+            'stop'    => ['trusttunnel client stop'],
         ],
         'name'        => 'trusttunnel_client',
         'pidfile'     => '/var/run/trusttunnel_client.pid',
