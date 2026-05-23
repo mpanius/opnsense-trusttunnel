@@ -58,9 +58,20 @@ class ServerController extends ApiMutableModelControllerBase
 
     public function delUserAction($uuid)
     {
-        // Task 11 wraps this in a reconfigure-on-success chain. For now,
-        // the default delBase + caller-triggered reconfigure suffices.
-        return $this->delBase('server.users.user', $uuid);
+        $result = $this->delBase('server.users.user', $uuid);
+        // Auto-reconfigure on successful delete — closes the gap where a
+        // revoked user could still authenticate until the operator
+        // remembered to click Apply. Mirrors Task 6 reconfigure chain.
+        if (is_array($result) && isset($result['result']) && $result['result'] === 'deleted') {
+            try {
+                $backend = new Backend();
+                $backend->configdRun('trusttunnel server.reconfigure');
+                $result['reconfigured'] = true;
+            } catch (\Throwable $e) {
+                $result['reconfigure_warning'] = $e->getMessage();
+            }
+        }
+        return $result;
     }
 
     // --- Set the whole server section --------------------------------------

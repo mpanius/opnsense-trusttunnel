@@ -81,10 +81,13 @@
 $(function () {
     var gridOpts = {
         "rowActions": function (column, row) {
-            // Bootgrid row-action formatter: edit, delete, plus our Export.
+            // Bootgrid row-action formatter: edit, export, revoke (red).
+            // Revoke is the destructive delete + service-restart path (Task 11);
+            // the standard 'deleteSelected' button is hidden in favour of it
+            // so the operator gets the warning modal.
             var html = '<button type="button" class="btn btn-xs btn-default" data-action="edit" data-row-id="' + row.uuid + '"><span class="fa fa-pencil"></span></button> ';
-            html    += '<button type="button" class="btn btn-xs btn-default" data-action="deleteSelected" data-row-id="' + row.uuid + '"><span class="fa fa-trash-o"></span></button> ';
-            html    += '<button type="button" class="btn btn-xs btn-default tt-export" data-username="' + $.fn.bootgrid.escape(row.username) + '"><span class="fa fa-share-square-o"></span> ' + "{{ lang._('Export') }}" + '</button>';
+            html    += '<button type="button" class="btn btn-xs btn-default tt-export" data-username="' + $.fn.bootgrid.escape(row.username) + '"><span class="fa fa-share-square-o"></span> ' + "{{ lang._('Export') }}" + '</button> ';
+            html    += '<button type="button" class="btn btn-xs btn-danger tt-revoke" data-uuid="' + row.uuid + '" data-username="' + $.fn.bootgrid.escape(row.username) + '"><span class="fa fa-ban"></span> ' + "{{ lang._('Revoke') }}" + '</button>';
             return html;
         }
     };
@@ -134,6 +137,34 @@ $(function () {
         node.select();
         try { document.execCommand('copy'); } catch (_) {}
         node.blur();
+    });
+
+    // --- Revoke flow (Task 11) ---
+    $(document).on('click', '.tt-revoke', function (e) {
+        e.preventDefault();
+        var uuid     = $(this).data('uuid');
+        var username = $(this).data('username');
+        BootstrapDialog.confirm({
+            title: "{{ lang._('Revoke user') }}: " + username,
+            type:  BootstrapDialog.TYPE_DANGER,
+            message: "{{ lang._('Are you sure you want to revoke this user? Any connected client using this account will be disconnected on next handshake.') }}",
+            btnOKLabel: "{{ lang._('Revoke') }}",
+            btnOKClass: 'btn-danger',
+            callback: function (ok) {
+                if (!ok) return;
+                ajaxCall('/api/trusttunnel/server/delUser/' + uuid, {}, function (data) {
+                    if (data && (data.result === 'deleted' || data.status === 'ok')) {
+                        $('#grid-users').bootgrid('reload');
+                    } else {
+                        BootstrapDialog.show({
+                            title: "{{ lang._('Revoke failed') }}",
+                            type:  BootstrapDialog.TYPE_DANGER,
+                            message: (data && data.error) ? data.error : "{{ lang._('Unknown error') }}"
+                        });
+                    }
+                });
+            }
+        });
     });
 });
 //]]>

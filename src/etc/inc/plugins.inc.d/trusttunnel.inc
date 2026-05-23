@@ -124,4 +124,26 @@ function trusttunnel_prepare_interface($iface)
     return null;
 }
 
-// trusttunnel_xmlrpc_sync() — Task 11.
+/**
+ * HA cluster sync — ships the <OPNsense><trusttunnel> subtree to the
+ * standby on Apply. Fields tagged `nosync="1"` (passwords on both server
+ * users and client server rows) are stripped by remove_nosync() in
+ * src/etc/rc.filter_synchronize before the XMLRPC POST goes out.
+ *
+ * Per Codex resolution: section name is lowercase `OPNsense.trusttunnel`
+ * (matches the model mount path).
+ *
+ * Verified end-to-end by TS-007 — both at the standby config.xml layer
+ * AND at the wire-payload layer via tcpdump on the master.
+ */
+function trusttunnel_xmlrpc_sync()
+{
+    return [
+        [
+            'description' => gettext('TrustTunnel'),
+            'section'     => 'OPNsense.trusttunnel',
+            'id'          => 'trusttunnel',
+            'services'    => ['trusttunnel_endpoint', 'trusttunnel_client'],
+        ],
+    ];
+}
