@@ -1,0 +1,8 @@
+TrustTunnel VPN plugin for OPNsense.
+
+Hosts (Server tab) or joins (Client tab) a TrustTunnel VPN — an
+HTTPS-disguised tunnel speaking HTTP/1.1, HTTP/2, and HTTP/3 over TLS
+or QUIC. Supports asymmetric site-to-site routing between two OPNsense
+edge routers via a `tt://?...` deep-link with optional QR-code export.
+
+WWW: https://github.com/mpanius/opnsense-trusttunnel

@@ -1,0 +1,22 @@
+# OPNsense plugin build artifacts
+work/
+pkg/
+*.pkg
+*.txz
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*~
+.vscode/
+.idea/
+
+# Secrets
+*.key
+trusttunnel-repo.key
+trusttunnel-repo-priv.pem
+
+# Build VMs notes (kept locally for now)
+build/local-notes/
