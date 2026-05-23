@@ -1,0 +1,9 @@
+<acl>
+    <page-vpn-trusttunnel>
+        <name>VPN: TrustTunnel</name>
+        <patterns>
+            <pattern>ui/trusttunnel/*</pattern>
+            <pattern>api/trusttunnel/*</pattern>
+        </patterns>
+    </page-vpn-trusttunnel>
+</acl>

@@ -1,0 +1,16 @@
+<model>
+    <mount>//OPNsense/trusttunnel</mount>
+    <description>TrustTunnel VPN plugin (Server + Client roles)</description>
+    <version>0.0.1</version>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <default>0</default>
+            </enabled>
+        </general>
+        <!--
+            <server>...</server>  — populated in Task 6
+            <client>...</client>  — populated in Task 9
+        -->
+    </items>
+</model>
