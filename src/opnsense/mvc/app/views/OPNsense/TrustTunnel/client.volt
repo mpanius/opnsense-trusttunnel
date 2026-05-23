@@ -5,6 +5,23 @@
  # trust-gate preview modal is wired in Task 10.
  #}
 
+{{ partial("layout_partials/base_form",['fields':clientForm,'id':'frm_ClientSettings']) }}
+
+<section class="page-content-main">
+    <div class="container-fluid">
+        <div class="row">
+            <section class="col-xs-12">
+                <hr/>
+                <button class="btn btn-primary" id="btnApplyClient" type="button">
+                    <b>{{ lang._('Apply') }}</b>
+                    <i id="btnApplyClientProgress"></i>
+                </button>
+                <br/><br/>
+            </section>
+        </div>
+    </div>
+</section>
+
 <section class="page-content-main">
     <div class="container-fluid">
         <div class="row">
@@ -68,6 +85,9 @@
     </div>
 </section>
 
+{# --- Add/Edit Server modal --- #}
+{{ partial("layout_partials/base_dialog",['fields':peerForm,'id':'DialogServer','label':lang._('Server')]) }}
+
 {# --- Trust-gate preview modal (Codex finding #5 — atomic confirm) --- #}
 <div id="DialogImportPreview" class="modal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg" role="document">
@@ -119,7 +139,11 @@ $(function () {
         }
     };
 
-    // Fetch active_server up-front; bootgrid renders against the cached value.
+    // Load main client form + active_server up-front.
+    mapDataToFormUI({'frm_ClientSettings': '/api/trusttunnel/client/get'}).done(function() {
+        formatTokenizersUI();
+        $('.selectpicker').selectpicker('refresh');
+    });
     ajaxGet('/api/trusttunnel/client/get/', {}, function (data) {
         if (data && data.trusttunnel && data.trusttunnel.client && data.trusttunnel.client.active_server) {
             window.__tt_activeServer = data.trusttunnel.client.active_server;
@@ -131,6 +155,20 @@ $(function () {
             add:    '/api/trusttunnel/client/addServer/',
             del:    '/api/trusttunnel/client/delServer/',
             options: gridOpts
+        });
+    });
+
+    $('#btnApplyClient').on('click', function () {
+        $('#btnApplyClientProgress').addClass('fa fa-spinner fa-pulse');
+        saveFormToEndpoint('/api/trusttunnel/client/set', 'frm_ClientSettings', function () {
+            ajaxCall('/api/trusttunnel/client/reconfigure', {}, function (data, status) {
+                $('#btnApplyClientProgress').removeClass('fa fa-spinner fa-pulse');
+                BootstrapDialog.show({
+                    title: "{{ lang._('Apply result') }}",
+                    type:  (data && data.status === 'ok') ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER,
+                    message: (data && data.output) ? data.output : ((data && data.error) || "{{ lang._('Unknown') }}")
+                });
+            });
         });
     });
 

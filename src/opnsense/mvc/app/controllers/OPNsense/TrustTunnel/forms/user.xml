@@ -1,0 +1,14 @@
+<form>
+    <field>
+        <id>user.username</id>
+        <label>Username</label>
+        <type>text</type>
+        <help>1–64 chars; letters, digits, dot, dash, underscore. Becomes the client deeplink's username field.</help>
+    </field>
+    <field>
+        <id>user.password</id>
+        <label>Password</label>
+        <type>password</type>
+        <help>Plaintext password stored in credentials.toml (chmod 600). Stripped from HA sync.</help>
+    </field>
+</form>
