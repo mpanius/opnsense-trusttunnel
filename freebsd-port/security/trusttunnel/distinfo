@@ -1,0 +1,4 @@
+# Populated by `make makesum` in Task 3 on the FreeBSD build VM.
+# Two TIMESTAMP/SIZE/SHA256 entries expected:
+# 1. TrustTunnel-1.0.33.tar.gz (USE_GITHUB=yes)
+# 2. google-boringssl-e1d6cd95a-boringssl_quiche_deps_boringssl.tar.gz (GH_TUPLE)

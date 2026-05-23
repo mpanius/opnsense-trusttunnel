@@ -1,0 +1,10 @@
+TrustTunnel VPN client (CLI).
+
+C++/Rust client library + `trusttunnel_client` binary that connects to a
+TrustTunnel endpoint. Supports system-wide TUN/Wintun tunnel and SOCKS5
+proxy, split tunneling via domain/IP exclusion lists, and custom DNS
+upstreams (DoH/DoT/DoQ).
+
+Pair with `security/trusttunnel` for the server-side daemon.
+
+WWW: https://github.com/TrustTunnel/TrustTunnelClient

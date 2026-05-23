@@ -1,0 +1,15 @@
+TrustTunnel VPN endpoint daemon.
+
+A modern open-source VPN server developed by AdGuard. By design,
+TrustTunnel traffic is indistinguishable from regular HTTPS, allowing
+it to bypass throttling and deep-packet inspection while maintaining
+strong privacy protections.
+
+This port builds the server-side binaries: `trusttunnel_endpoint`
+(daemon listening on TLS/QUIC) and `trusttunnel_setup_wizard`
+(interactive config generator with built-in ACME support).
+
+The companion `security/trusttunnel-client` port provides the
+client-side CLI binary.
+
+WWW: https://github.com/TrustTunnel/TrustTunnel
