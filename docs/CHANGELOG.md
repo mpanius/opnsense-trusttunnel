@@ -2,7 +2,36 @@
 
 All notable changes per release. Newest first.
 
-## v1.0.1 (unreleased)
+## v1.0.2 (2026-05-23)
+
+### Fixed
+- **`services()` hook** in `src/etc/inc/plugins.inc.d/trusttunnel.inc`
+  used dotted action names (`trusttunnel server.restart`) that the
+  configd action loader does not accept (sections like `[server.restart]`
+  become nested map keys; invocation must use space-separated tokens).
+  Fixed all 6 invocations to `trusttunnel server {restart,start,stop}` /
+  `trusttunnel client {restart,start,stop}`. Same root cause as commit
+  `8c0f85f` (controllers) but the hook wasn't exercised by Apply, only
+  by Services → Services manual Start/Stop/Restart UI.
+
+### Documentation
+- **`docs/architecture.md`** — ASCII component map for the whole tree,
+  Server/Client Apply data flow diagrams, deeplink TLV protocol details,
+  OPNsense hook table (services/devices/syslog/xmlrpc_sync), firewall
+  rule shape with `<plugin_managed>` marker, TUN device lifecycle on
+  FreeBSD.
+- **`docs/troubleshooting.md`** — all real issues from the v1 dev
+  cycle with their root causes: configd dotted vs space, TUN buffer
+  overflow, SocketAddressStorage byte layout, port :443 conflict with
+  lighttpd, NetworkMonitor is_running() UB, AF_47 → AF_INET, perf
+  expectations, HA failover.
+- **`docs/install.md`** — rewritten to cover two paths: GitHub Releases
+  direct (testing) and signed pkg repo (production fleets). Includes
+  step-by-step first-run for both Server and Client tabs, site-to-site
+  setup mirroring WireGuard s2s guide, and a `curl` bandwidth verify
+  recipe.
+
+## v1.0.1 (2026-05-23)
 
 ### END-TO-END DATA PLANE VERIFIED 🎉
 
