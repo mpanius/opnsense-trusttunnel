@@ -8,10 +8,11 @@ endpoint on one OPNsense router, joins it from another, and routes a LAN
 across the tunnel — asymmetric site-to-site in v1, full mesh planned for
 v2.
 
-Status: **v1 functional** (server-side production-ready; client-side
-established `VPN_SS_CONNECTED` end-to-end on FreeBSD after porting ~30
-patches — see [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md)).
-Final data-plane polish in v1.0.1.
+Status: **v1 functional end-to-end** — FreeBSD client `trusttunnel_client`
+builds + reaches `VPN_SS_CONNECTED` + forwards real HTTP traffic through
+the tunnel (`HTTP 301 in 93 ms` via `curl http://1.1.1.1/` over `tun0`).
+See [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md) for the
+~30 cumulative FreeBSD-portation patches.
 
 See [`docs/`](docs/) for design, release, and patch documentation.
 

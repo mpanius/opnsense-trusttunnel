@@ -4,6 +4,26 @@ All notable changes per release. Newest first.
 
 ## v1.0.1 (unreleased)
 
+### END-TO-END DATA PLANE VERIFIED 🎉
+
+Full HTTP traffic forwarded through FreeBSD VPN tunnel verified
+2026-05-23 08:05:30:
+
+```
+$ curl --max-time 8 -o /tmp/cf.txt http://1.1.1.1/  # routed via tun0
+HTTP 301 0.093116s
+```
+
+Server side (--loglvl debug):
+```
+[CLIENT=0] New TCP client: [internal-ip]:46656
+[CLIENT=0] TLS13_CHACHA20_POLY1305_SHA256 ALPN h2
+[CLIENT=0/TUN=0/CONN=3] Received: CONNECT 1.1.1.1:80
+[CLIENT=0/TUN=0/CONN=3] Successfully connected to destination 1.1.1.1:80
+```
+
+Client tun0 bidirectional counters: Ipkts=4 Ibytes=606 / Opkts=6 Obytes=391.
+
 ### Fixed
 - **`render_server_config.py`** — emit `[listen_protocols.http2]` /
   `[listen_protocols.quic]` per-protocol sub-tables instead of the
