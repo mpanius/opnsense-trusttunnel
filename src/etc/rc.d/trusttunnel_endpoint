@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# Copyright (c) 2026 Mikhail Panyushkin <mpanius@gmail.com>
+# All rights reserved.
+# BSD-2-Clause — see LICENSE.
+#
+# PROVIDE: trusttunnel_endpoint
+# REQUIRE: NETWORKING SERVERS DAEMON ldconfig resolv FILESYSTEMS
+# KEYWORD: shutdown
+#
+# Wrap /usr/local/sbin/trusttunnel_endpoint (from security/trusttunnel
+# FreeBSD port) as a daemon(8)-supervised service. Logs route through
+# syslog with facility `trusttunnel-server`.
+
+. /etc/rc.subr
+
+name=trusttunnel_endpoint
+rcvar=trusttunnel_endpoint_enable
+
+load_rc_config $name
+
+: ${trusttunnel_endpoint_enable:="NO"}
+: ${trusttunnel_endpoint_config:="/usr/local/etc/trusttunnel/server/vpn.toml"}
+: ${trusttunnel_endpoint_hosts:="/usr/local/etc/trusttunnel/server/hosts.toml"}
+: ${trusttunnel_endpoint_user:="root"}
+: ${trusttunnel_endpoint_logfile:="/var/log/trusttunnel/endpoint.log"}
+
+pidfile=/var/run/${name}.pid
+command=/usr/sbin/daemon
+procname=/usr/local/sbin/trusttunnel_endpoint
+command_args="-S -T trusttunnel-server -P ${pidfile} ${procname} \
+        ${trusttunnel_endpoint_config} ${trusttunnel_endpoint_hosts}"
+
+required_files="${trusttunnel_endpoint_config} ${trusttunnel_endpoint_hosts} ${procname}"
+
+start_precmd=trusttunnel_endpoint_precmd
+
+trusttunnel_endpoint_precmd()
+{
+    install -d -m 0750 -o root -g wheel /var/log/trusttunnel || return 1
+    return 0
+}
+
+run_rc_command "$1"
