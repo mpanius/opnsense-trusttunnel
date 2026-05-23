@@ -23,10 +23,10 @@ class IndexController extends BaseIndexController
 {
     public function indexAction()
     {
-        // Forms for the two tabs — populated in later tasks. The view checks
-        // for null and shows the placeholder paragraph instead.
-        $this->view->serverForm = null;
-        $this->view->clientForm = null;
+        $this->view->serverForm = $this->getForm('server');
+        $this->view->userForm   = $this->getForm('user');
+        $this->view->clientForm = $this->getForm('client');
+        $this->view->peerForm   = $this->getForm('peer');
         $this->view->pick('OPNsense/TrustTunnel/index');
     }
 }

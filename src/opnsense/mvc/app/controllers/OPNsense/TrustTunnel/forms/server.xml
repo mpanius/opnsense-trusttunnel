@@ -1,0 +1,45 @@
+<form>
+    <field>
+        <id>trusttunnel.server.enabled</id>
+        <label>Enable Server</label>
+        <type>checkbox</type>
+        <help>Run the trusttunnel_endpoint daemon on this OPNsense.</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.listen_address</id>
+        <label>Listen address</label>
+        <type>text</type>
+        <hint>0.0.0.0:443</hint>
+        <help>host:port the endpoint listens on.</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.hostname</id>
+        <label>Hostname</label>
+        <type>text</type>
+        <hint>vpn.example.com</hint>
+        <help>Public hostname clients connect to (matches the cert CN).</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.cert_ref</id>
+        <label>TLS certificate</label>
+        <type>dropdown</type>
+        <help>Pick a cert from System &#8594; Trust &#8594; Certificates (issued by os-acme-client or self-signed).</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.protocols</id>
+        <label>Protocols</label>
+        <type>select_multiple</type>
+        <help>HTTP protocols to advertise. Default: http2,http3.</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.allow_private_network_connections</id>
+        <label>Allow private network connections</label>
+        <type>checkbox</type>
+        <help>Required for site-to-site routing of LAN traffic.</help>
+    </field>
+    <field>
+        <id>trusttunnel.server.ipv6_available</id>
+        <label>IPv6 available</label>
+        <type>checkbox</type>
+    </field>
+</form>
