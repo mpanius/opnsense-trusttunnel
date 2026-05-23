@@ -95,4 +95,185 @@ class ServerController extends ApiMutableModelControllerBase
         $status = (strpos($output, 'OK') !== false || $output === '') ? 'ok' : 'failed';
         return ['status' => $status, 'output' => $output];
     }
+
+    // --- Self-signed certificate generator --------------------------------
+
+    /**
+     * Generate a self-signed certificate via PHP openssl_csr_new pipeline
+     * and write it into System -> Trust as a new <cert> entry, then return
+     * the new refid so the frontend can refresh CertificateField dropdown.
+     *
+     * Closes Claude must_fix #3 (fail-loud error chain) and should_fix #9
+     * (entropy gate on freshly-booted VMs).
+     */
+    public function generateSelfSignedAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'error' => 'POST required'];
+        }
+
+        $commonName = (string)$this->request->getPost('common_name', '');
+        $days       = (int)$this->request->getPost('days', 365);
+        $sansRaw    = (string)$this->request->getPost('sans', '');
+        $sans       = array_values(array_filter(array_map('trim', explode(',', $sansRaw))));
+
+        // Input validation — fail-loud on bad inputs.
+        if ($commonName === '' || strlen($commonName) > 64) {
+            return ['status' => 'failed', 'error' => 'common_name must be 1-64 chars'];
+        }
+        if (!preg_match('/^[A-Za-z0-9._\-\* ]+$/', $commonName)) {
+            return ['status' => 'failed', 'error' => 'common_name contains forbidden chars'];
+        }
+        if ($days < 1 || $days > 3650) {
+            return ['status' => 'failed', 'error' => 'days must be between 1 and 3650'];
+        }
+
+        // Entropy gate (Claude should_fix #9). FreeBSD's fortuna re-seeds
+        // very quickly on first boot but VM clones can stall — surface a
+        // clear 503 rather than silently produce a weak key.
+        $minpool = @shell_exec('/sbin/sysctl -n kern.random.fortuna.minpoolsize 2>/dev/null');
+        if ($minpool !== null && trim((string)$minpool) === '0') {
+            $this->response->setStatusCode(503);
+            return [
+                'status' => 'failed',
+                'error'  => 'System entropy not yet ready. Wait 30s and retry.',
+            ];
+        }
+
+        // openssl pipeline — every call's return is checked. On any false,
+        // drain openssl_error_string() into errs[] and return HTTP 500.
+        $errs = [];
+        $drainErrs = function () use (&$errs) {
+            while ($e = openssl_error_string()) {
+                $errs[] = $e;
+            }
+        };
+
+        $config = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            'digest_alg'       => 'sha256',
+        ];
+
+        $dn = ['commonName' => $commonName];
+
+        $privkey = openssl_pkey_new($config);
+        if ($privkey === false) {
+            $drainErrs();
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => $errs ?: ['openssl_pkey_new returned false']];
+        }
+
+        $csr = openssl_csr_new($dn, $privkey, $config);
+        if ($csr === false) {
+            $drainErrs();
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => $errs ?: ['openssl_csr_new returned false']];
+        }
+
+        // SAN extensions: write a temporary openssl.cnf so the SAN ends up
+        // in x509 v3 extensions. If sans is empty, sign without SANs.
+        $signConfig = $config;
+        $cnfPath = null;
+        if (!empty($sans)) {
+            $sanList = implode(',', array_map(function ($s) {
+                return 'DNS:' . $s;
+            }, $sans));
+            $cnfPath = tempnam(sys_get_temp_dir(), 'tt_openssl_');
+            $cnfBody = "[req]\ndistinguished_name = req_dn\nreq_extensions = v3_req\n"
+                     . "[req_dn]\n"
+                     . "[v3_req]\nsubjectAltName = " . $sanList . "\n";
+            if (@file_put_contents($cnfPath, $cnfBody) === false) {
+                $this->response->setStatusCode(500);
+                return ['status' => 'failed', 'errors' => ['cannot stage SAN openssl.cnf']];
+            }
+            $signConfig['config'] = $cnfPath;
+            $signConfig['x509_extensions'] = 'v3_req';
+        }
+
+        $x509 = openssl_csr_sign($csr, null, $privkey, $days, $signConfig);
+        if ($cnfPath !== null) {
+            @unlink($cnfPath);
+        }
+        if ($x509 === false) {
+            $drainErrs();
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => $errs ?: ['openssl_csr_sign returned false']];
+        }
+
+        $crtPem = '';
+        if (openssl_x509_export($x509, $crtPem) === false || $crtPem === '') {
+            $drainErrs();
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => $errs ?: ['openssl_x509_export failed']];
+        }
+
+        $prvPem = '';
+        if (openssl_pkey_export($privkey, $prvPem) === false || $prvPem === '') {
+            $drainErrs();
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => $errs ?: ['openssl_pkey_export failed']];
+        }
+
+        // Sanity-check the PEM strings before they hit the Trust store.
+        if (strpos($crtPem, '-----BEGIN CERTIFICATE-----') === false) {
+            return ['status' => 'failed', 'errors' => ['exported certificate is not PEM']];
+        }
+        if (
+            strpos($prvPem, '-----BEGIN PRIVATE KEY-----') === false &&
+            strpos($prvPem, '-----BEGIN RSA PRIVATE KEY-----') === false
+        ) {
+            return ['status' => 'failed', 'errors' => ['exported private key is not PEM']];
+        }
+
+        // Append to /conf/config.xml <cert> via the OPNsense low-level
+        // Config helper. Use uuid4 for refid (mirrors os-acme-client).
+        try {
+            $refid = $this->writeCertToTrustStore($commonName, $crtPem, $prvPem);
+        } catch (\Throwable $e) {
+            $this->response->setStatusCode(500);
+            return ['status' => 'failed', 'errors' => ['Trust store write failed: ' . $e->getMessage()]];
+        }
+
+        return [
+            'status'      => 'ok',
+            'refid'       => $refid,
+            'common_name' => $commonName,
+            'days'        => $days,
+        ];
+    }
+
+    /**
+     * Append a new <cert> entry to /conf/config.xml under the legacy root
+     * list, mirroring os-acme-client's Trust\Cert.php write pattern.
+     * Returns the new refid (UUIDv4).
+     */
+    private function writeCertToTrustStore(string $commonName, string $crtPem, string $prvPem): string
+    {
+        // Use OPNsense's UUID helper if available; fall back to RFC 4122 v4.
+        $refid = $this->generateUuid();
+
+        $cfg = \OPNsense\Core\Config::getInstance();
+        $cfg->lock();
+        try {
+            $xmlObj = $cfg->object();
+            $cert = $xmlObj->addChild('cert');
+            $cert->addChild('refid', $refid);
+            $cert->addChild('descr', 'TrustTunnel self-signed (' . $commonName . ')');
+            $cert->addChild('crt', base64_encode($crtPem));
+            $cert->addChild('prv', base64_encode($prvPem));
+            $cfg->save();
+        } finally {
+            $cfg->unlock();
+        }
+        return $refid;
+    }
+
+    private function generateUuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40); // version 4
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80); // variant 10
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
 }

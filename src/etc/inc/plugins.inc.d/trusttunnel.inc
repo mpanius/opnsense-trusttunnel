@@ -11,17 +11,87 @@
  * --------------------------------------------------------------------------
  * OPNsense plugin hooks for os-trusttunnel.
  *
- * Each function follows the OPNsense `plugins_<name>()` dispatcher contract.
- * Hooks populated in later plan tasks:
- *   - trusttunnel_services()      — Task 7 (Services → Services entries)
- *   - trusttunnel_syslog()        — Task 7 (System → Log Files tab)
- *   - trusttunnel_devices()       — Task 10 (Interfaces → Assignments tt<N>)
- *   - trusttunnel_xmlrpc_sync()   — Task 11 (HA / CARP cluster sync)
+ * Hook contracts (called by /usr/local/etc/inc/plugins.inc dispatchers):
+ *   - plugins_services()     -> trusttunnel_services()
+ *   - plugins_syslog()       -> trusttunnel_syslog()
+ *   - plugins_devices()      -> trusttunnel_devices()         (Task 10)
+ *   - plugins_xmlrpc_sync()  -> trusttunnel_xmlrpc_sync()     (Task 11)
  *
- * Auto-firewall rule is NOT a hook here — it's persisted in <filter><rule>
- * directly by ServerController in Task 10 (see Codex finding #1).
+ * Auto-firewall rule is NOT a hook here — it's persisted directly into
+ * /conf/config.xml <filter><rule> by ServerController in Task 10 (see
+ * Codex finding #1).
  * --------------------------------------------------------------------------
  */
 
-// Hook stubs intentionally left empty; the dispatcher tolerates missing
-// functions, so an empty plugins.inc.d file is a valid no-op skeleton.
+/**
+ * Register the two services in Services -> Services so the user gets a
+ * uniform start/stop/restart UI per OPNsense convention.
+ */
+function trusttunnel_services()
+{
+    $services = [];
+
+    $cfg = \OPNsense\Core\Config::getInstance()->object();
+    $serverEnabled = false;
+    $clientEnabled = false;
+    if (isset($cfg->OPNsense->trusttunnel)) {
+        $tt = $cfg->OPNsense->trusttunnel;
+        $serverEnabled = isset($tt->server->enabled) && (string)$tt->server->enabled === '1';
+        $clientEnabled = isset($tt->client->enabled) && (string)$tt->client->enabled === '1';
+    }
+
+    $services[] = [
+        'description' => gettext('TrustTunnel Endpoint (server)'),
+        'configd'     => [
+            'restart' => ['trusttunnel server.restart'],
+            'start'   => ['trusttunnel server.start'],
+            'stop'    => ['trusttunnel server.stop'],
+        ],
+        'name'        => 'trusttunnel_endpoint',
+        'pidfile'     => '/var/run/trusttunnel_endpoint.pid',
+        'php'         => [
+            'restart' => [],
+            'start'   => [],
+        ],
+        'enabled'     => $serverEnabled,
+        'nocheck'     => false,
+    ];
+
+    $services[] = [
+        'description' => gettext('TrustTunnel Client'),
+        'configd'     => [
+            'restart' => ['trusttunnel client.restart'],
+            'start'   => ['trusttunnel client.start'],
+            'stop'    => ['trusttunnel client.stop'],
+        ],
+        'name'        => 'trusttunnel_client',
+        'pidfile'     => '/var/run/trusttunnel_client.pid',
+        'php'         => [
+            'restart' => [],
+            'start'   => [],
+        ],
+        'enabled'     => $clientEnabled,
+        'nocheck'     => false,
+    ];
+
+    return $services;
+}
+
+/**
+ * Register syslog-ng facilities so System -> Log Files gets a TrustTunnel
+ * tab combining server + client output.
+ *
+ * The `facility` strings are the program names used in syslog-ng's filter.
+ * They MUST match the daemon(8) `-T` flag in rc.d/trusttunnel_{endpoint,client}.
+ */
+function trusttunnel_syslog()
+{
+    return [
+        'trusttunnel' => [
+            'facility' => ['trusttunnel-server', 'trusttunnel-client'],
+        ],
+    ];
+}
+
+// trusttunnel_devices() — Task 10.
+// trusttunnel_xmlrpc_sync() — Task 11.
