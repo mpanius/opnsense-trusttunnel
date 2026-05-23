@@ -65,7 +65,7 @@ class ServerController extends ApiMutableModelControllerBase
         if (is_array($result) && isset($result['result']) && $result['result'] === 'deleted') {
             try {
                 $backend = new Backend();
-                $backend->configdRun('trusttunnel server.reconfigure');
+                $backend->configdRun('trusttunnel server reconfigure');
                 $result['reconfigured'] = true;
             } catch (\Throwable $e) {
                 $result['reconfigure_warning'] = $e->getMessage();
@@ -250,7 +250,7 @@ class ServerController extends ApiMutableModelControllerBase
             return ['status' => 'failed', 'error' => 'POST required'];
         }
         $backend = new Backend();
-        $output = trim((string)$backend->configdRun('trusttunnel server.reconfigure'));
+        $output = trim((string)$backend->configdRun('trusttunnel server reconfigure'));
         $status = (strpos($output, 'OK') !== false || $output === '') ? 'ok' : 'failed';
         return ['status' => $status, 'output' => $output];
     }

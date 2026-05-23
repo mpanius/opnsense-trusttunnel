@@ -50,7 +50,7 @@ class DeeplinkController extends ApiControllerBase
         }
 
         $backend = new Backend();
-        $raw = $backend->configdpRun('trusttunnel server.export_deeplink', [$username]);
+        $raw = $backend->configdpRun('trusttunnel server export_deeplink', [$username]);
         $raw = trim((string)$raw);
         if ($raw === '') {
             return ['status' => 'failed', 'error' => 'deeplink_export.py produced no output'];

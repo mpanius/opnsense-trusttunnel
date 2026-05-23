@@ -38,7 +38,7 @@ class ServiceController extends ApiControllerBase
 
     private function dispatch(string $role, string $verb): array
     {
-        $action = $this->resolveRole($role) . '.' . $verb;
+        $action = $this->resolveRole($role) . ' ' . $verb;
         $backend = new Backend();
         $output = trim((string)$backend->configdRun('trusttunnel ' . $action));
         return [
@@ -92,7 +92,7 @@ class ServiceController extends ApiControllerBase
             return ['status' => 'failed', 'error' => $e->getMessage()];
         }
         $backend = new Backend();
-        $output = trim((string)$backend->configdRun('trusttunnel ' . $resolved . '.status'));
+        $output = trim((string)$backend->configdRun('trusttunnel ' . $resolved . ' status'));
         // FreeBSD rc.d `onestatus` returns lines like "trusttunnel_endpoint is running as pid 1234."
         $running = (stripos($output, 'is running') !== false);
         return [

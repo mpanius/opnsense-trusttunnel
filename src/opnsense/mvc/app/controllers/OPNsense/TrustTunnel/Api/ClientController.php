@@ -141,7 +141,7 @@ class ClientController extends ApiMutableModelControllerBase
             return ['status' => 'failed', 'error' => 'POST required'];
         }
         $backend = new Backend();
-        $output = trim((string)$backend->configdRun('trusttunnel client.reconfigure'));
+        $output = trim((string)$backend->configdRun('trusttunnel client reconfigure'));
         $status = (strpos($output, 'OK') !== false || $output === '') ? 'ok' : 'failed';
         return ['status' => $status, 'output' => $output];
     }
