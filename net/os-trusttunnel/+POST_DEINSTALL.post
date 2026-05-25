@@ -38,8 +38,13 @@ if ($removed > 0) {
 $cfg->unlock();
 ' 2>/dev/null || true
 
-# Remove the on-disk runtime directories. The rendered TOML files there
-# are derived state; removing them is safe.
-rm -rf /usr/local/etc/trusttunnel /var/log/trusttunnel || true
+# Remove the server's on-disk runtime directory only. The client/ subdir
+# belongs to the separate os-trusttunnel-client plugin; leave it alone.
+# The rendered TOML files are derived state; removing them is safe.
+rm -rf /usr/local/etc/trusttunnel/server || true
+
+# Remove the shared parent dirs only if now empty (client plugin gone too).
+rmdir /usr/local/etc/trusttunnel 2>/dev/null || true
+rmdir /var/log/trusttunnel 2>/dev/null || true
 
 exit 0

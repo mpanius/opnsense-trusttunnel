@@ -5,10 +5,11 @@
 set -eu
 
 # Pre-create runtime directories for rendered TOML and cert materialization.
+# Server owns the server/ subdir; the client/ subdir belongs to the
+# separate os-trusttunnel-client plugin.
 install -d -m 0755 -o root -g wheel /usr/local/etc/trusttunnel
 install -d -m 0750 -o root -g wheel /usr/local/etc/trusttunnel/server
 install -d -m 0750 -o root -g wheel /usr/local/etc/trusttunnel/server/certs
-install -d -m 0750 -o root -g wheel /usr/local/etc/trusttunnel/client
 
 # Pre-create log directory if rc.d wrappers want to drop a file there
 # (syslog-ng handles routing via trusttunnel_syslog() hook; this is fallback).

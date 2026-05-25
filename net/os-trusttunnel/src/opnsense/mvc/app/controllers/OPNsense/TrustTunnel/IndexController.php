@@ -14,7 +14,7 @@ namespace OPNsense\TrustTunnel;
 use OPNsense\Base\IndexController as BaseIndexController;
 
 /**
- * GUI router for /ui/trusttunnel/ — renders the two-tab Volt view.
+ * GUI router for /ui/trusttunnel/ — renders the server view.
  *
  * Server-side form data and bootgrid wiring are populated as Tasks 6 and 9
  * land. Right now the tabs render placeholder content.
@@ -25,8 +25,6 @@ class IndexController extends BaseIndexController
     {
         $this->view->serverForm = $this->getForm('server');
         $this->view->userForm   = $this->getForm('user');
-        $this->view->clientForm = $this->getForm('client');
-        $this->view->peerForm   = $this->getForm('peer');
         $this->view->pick('OPNsense/TrustTunnel/index');
     }
 }

@@ -30,8 +30,8 @@ class ServiceController extends ApiControllerBase
      */
     private function resolveRole(string $role): string
     {
-        if ($role !== 'server' && $role !== 'client') {
-            throw new \InvalidArgumentException("role must be 'server' or 'client', got " . $role);
+        if ($role !== 'server') {
+            throw new \InvalidArgumentException("role must be 'server', got " . $role);
         }
         return $role;
     }
