@@ -1,36 +1,68 @@
-# os-trusttunnel — OPNsense plugin for TrustTunnel VPN
+# os-trusttunnel — OPNsense plugins for TrustTunnel VPN
 
 [![License: BSD-2-Clause](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
 
-OPNsense plugin (Server + Client tabs) wrapping the
-[TrustTunnel](https://github.com/TrustTunnel/TrustTunnel) VPN. Hosts an
-endpoint on one OPNsense router, joins it from another, and routes a LAN
-across the tunnel — asymmetric site-to-site in v1, full mesh planned for
-v2.
+**Two** OPNsense plugins wrapping the
+[TrustTunnel](https://github.com/TrustTunnel/TrustTunnel) VPN, split by
+role so a box only pulls the binary it actually needs:
 
-Status: **v1 functional end-to-end** — FreeBSD client `trusttunnel_client`
-builds + reaches `VPN_SS_CONNECTED` + forwards real HTTP traffic through
-the tunnel (`HTTP 301 in 93 ms` via `curl http://1.1.1.1/` over `tun0`).
-See [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md) for the
-~30 cumulative FreeBSD-portation patches.
+| Plugin | Role | Depends on | Menu |
+|--------|------|------------|------|
+| `os-trusttunnel` | **Server** — host an endpoint | `trusttunnel` (Rust, builds cleanly) + `qrencode` | VPN → TrustTunnel |
+| `os-trusttunnel-client` | **Client** — join an endpoint | `trusttunnel-client` (C++/Rust, ~30 FreeBSD patches) | VPN → TrustTunnel Client |
+
+Install one, the other, or both. A router that only hosts an endpoint
+never pulls the fragile client binary; a router that only joins never
+pulls the server stack. Asymmetric site-to-site in v2, full mesh later.
+
+Status: **v2 functional end-to-end** — FreeBSD client `trusttunnel_client`
+builds + reaches `VPN_SS_CONNECTED` + forwards real traffic through the
+tunnel (sustained 114 Mbit/s, 197 Mbit/s single-stream — see
+[`docs/bandwidth-benchmark.md`](docs/bandwidth-benchmark.md)).
+[`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md) documents
+the ~30 cumulative FreeBSD-portation patches.
 
 See [`docs/`](docs/) for design, release, and patch documentation.
 
-## Features (v1)
+## Repository layout
 
-- **Server tab** — host a TrustTunnel endpoint: pick a cert from System →
-  Trust → Certificates (works with `os-acme-client`-issued certs), define
-  users, Apply. Per-user **Export deep-link** with QR code.
-- **Client tab** — paste a `tt://?...` deep-link, preview the decoded
+```
+net/os-trusttunnel/         — server plugin (PLUGIN_NAME=trusttunnel)
+net/os-trusttunnel-client/  — client plugin (PLUGIN_NAME=trusttunnel-client)
+freebsd-port/security/      — the two FreeBSD ports producing the binaries
+docs/                       — shared documentation
+dist/                       — built .pkg artifacts (also on GitHub Releases)
+```
+
+Each `net/<plugin>/` dir is a standard OPNsense plugin (`Makefile` +
+`src/`). State is namespaced per plugin: server writes
+`<OPNsense><trusttunnel>`, client writes `<OPNsense><trusttunnelclient>`
+— no collision on HA-sync or uninstall.
+
+## Features
+
+### Server plugin (`os-trusttunnel`)
+
+- Host a TrustTunnel endpoint: pick a cert from System → Trust →
+  Certificates (works with `os-acme-client`-issued certs), define users,
+  Apply. Per-user **Export deep-link** with QR code.
+- **HA cluster sync** — `trusttunnel_xmlrpc_sync()` ships the
+  `<trusttunnel>` subtree to the standby on CARP failover; passwords
+  stripped via `nosync="1"`.
+- **Auto-firewall rule** — creates and tracks one inbound pass rule on
+  WAN for the listen port, marked
+  `<plugin_managed>os-trusttunnel</plugin_managed>`.
+- **Per-user revocation** — drop a user from the bootgrid; endpoint
+  restarts and existing connections fail on next handshake.
+
+### Client plugin (`os-trusttunnel-client`)
+
+- Join an endpoint: paste a `tt://?...` deep-link, preview the decoded
   fields as a trust gate, Confirm, Apply. Multi-server array with one
   Active server.
-- **HA cluster sync** — `trusttunnel_xmlrpc_sync()` ships config to the
-  standby on CARP failover; passwords stripped via `nosync="1"`.
-- **Auto-firewall rule** — plugin creates and tracks one inbound pass
-  rule on WAN for the chosen listen port. Visible in Firewall → Rules,
-  user-editable, marked with `<plugin_managed>os-trusttunnel</plugin_managed>`.
-- **Per-user revocation** — drop a user from the Server bootgrid;
-  endpoint restarts and existing connections fail on next handshake.
+- **TUN device** — registers the `tt<N>` pattern in Interfaces →
+  Assignments via `trusttunnelclient_devices()`.
+- **HA cluster sync** — ships the `<trusttunnelclient>` subtree.
 
 ## Compatibility
 

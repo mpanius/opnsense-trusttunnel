@@ -2,6 +2,50 @@
 
 All notable changes per release. Newest first.
 
+## v2.0.0 (2026-05-25)
+
+### Changed (breaking — plugin split)
+- **Split the single `os-trusttunnel` plugin into two role-specific
+  plugins** so a host only pulls the binary it needs:
+  - `os-trusttunnel` — server role. `PLUGIN_DEPENDS=trusttunnel qrencode`.
+    Drops the `trusttunnel-client` dependency entirely. The Rust endpoint
+    binary builds cleanly (PR #28), so an endpoint-only box is no longer
+    coupled to the fragile ~30-patch C++/Rust client build.
+  - `os-trusttunnel-client` — client role. `PLUGIN_DEPENDS=trusttunnel-client`.
+    No server binary, no qrencode.
+- **Repo restructured** to `net/os-trusttunnel/` + `net/os-trusttunnel-client/`,
+  each a standard OPNsense plugin dir (Makefile + src/). `freebsd-port/`
+  and `docs/` stay shared at repo root.
+- **Config namespaces separated**: server writes
+  `<OPNsense><trusttunnel>`, client writes `<OPNsense><trusttunnelclient>`
+  (mount `//OPNsense/trusttunnelclient`). No collision on HA-sync or
+  uninstall — each plugin owns its subtree.
+- **Menus**: VPN → TrustTunnel (server) and VPN → TrustTunnel Client
+  (client) are now separate entries.
+- **UI**: each plugin renders a single-purpose view (no more server/client
+  tabs). DeeplinkController split — export lives in the server plugin,
+  import/preview/confirm in the client plugin.
+- **configd actions** split into `actions_trusttunnel.conf` (server.*) and
+  `actions_trusttunnelclient.conf` (client.*); the client topic is
+  `trusttunnelclient`.
+- **Hooks** split per plugin: server keeps services/syslog(trusttunnel-server)/
+  xmlrpc; client keeps services/syslog(trusttunnel-client)/devices(tt<N>)/
+  xmlrpc. Function names prefixed `trusttunnelclient_*` in the client.
+- **Deinstall isolation**: each `+POST_DEINSTALL` removes only its own
+  config subdir and `rmdir`s the shared parent only when empty — uninstalling
+  one plugin never destroys the other's state.
+
+### Verified
+- Both `.pkg` build cleanly via `pkg-static create`; file lists confirm
+  zero cross-contamination (server pkg has no client files and vice versa).
+
+### Migration
+- `os-trusttunnel` keeps its name (non-breaking for existing installs of
+  the server role). To get the client role, install the new
+  `os-trusttunnel-client`. A box that had the old combined plugin and used
+  the client tab should install `os-trusttunnel-client` and re-import its
+  deeplink (client config now lives under `<trusttunnelclient>`).
+
 ## v1.0.2 (2026-05-23)
 
 ### Fixed
