@@ -1,0 +1,65 @@
+<model>
+    <mount>//OPNsense/trusttunnelclient</mount>
+    <description>TrustTunnel VPN client</description>
+    <version>2.0.0</version>
+    <items>
+        <client>
+            <enabled type="BooleanField">
+                <default>0</default>
+            </enabled>
+            <active_server type="UniqueIdField"/>
+            <mode type="OptionField">
+                <default>selective</default>
+                <OptionValues>
+                    <general>general</general>
+                    <selective>selective</selective>
+                </OptionValues>
+            </mode>
+            <tun_interface type="TextField">
+                <default>tt0</default>
+                <Mask>/^[A-Za-z][A-Za-z0-9_]{0,14}$/</Mask>
+                <ValidationMessage>Interface name must be 1-15 chars, start with a letter; letters/digits/underscore only</ValidationMessage>
+            </tun_interface>
+            <allowed_destinations type="CSVListField"/>
+            <servers>
+                <server type="ArrayField">
+                    <name type="TextField">
+                        <Required>Y</Required>
+                        <Mask>/^[\p{L}\p{N}\s._-]{1,64}$/u</Mask>
+                    </name>
+                    <hostname type="HostnameField">
+                        <Required>Y</Required>
+                    </hostname>
+                    <addresses type="CSVListField">
+                        <Required>Y</Required>
+                    </addresses>
+                    <custom_sni type="TextField"/>
+                    <username type="TextField">
+                        <Required>Y</Required>
+                        <Mask>/^[A-Za-z0-9._-]{1,64}$/</Mask>
+                        <ValidationMessage>Username must be 1-64 chars, letters/digits/dot/dash/underscore</ValidationMessage>
+                    </username>
+                    <password type="TextField" nosync="1">
+                        <Required>Y</Required>
+                    </password>
+                    <certificate_pem type="TextField" nosync="1"/>
+                    <skip_verification type="BooleanField">
+                        <default>0</default>
+                    </skip_verification>
+                    <upstream_protocol type="OptionField">
+                        <default>http2</default>
+                        <OptionValues>
+                            <http2>http2</http2>
+                            <http3>http3</http3>
+                        </OptionValues>
+                    </upstream_protocol>
+                    <anti_dpi type="BooleanField">
+                        <default>0</default>
+                    </anti_dpi>
+                    <client_random_prefix type="TextField"/>
+                    <dns_upstreams type="CSVListField"/>
+                </server>
+            </servers>
+        </client>
+    </items>
+</model>

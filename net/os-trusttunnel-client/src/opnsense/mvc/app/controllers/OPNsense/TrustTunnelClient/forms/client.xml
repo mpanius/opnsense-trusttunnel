@@ -1,0 +1,27 @@
+<form>
+    <field>
+        <id>trusttunnel.client.enabled</id>
+        <label>Enable Client</label>
+        <type>checkbox</type>
+        <help>Run the trusttunnel_client daemon on this OPNsense (requires an Active server).</help>
+    </field>
+    <field>
+        <id>trusttunnel.client.mode</id>
+        <label>Mode</label>
+        <type>dropdown</type>
+        <help>general = route everything through the tunnel. selective = only allowed_destinations.</help>
+    </field>
+    <field>
+        <id>trusttunnel.client.tun_interface</id>
+        <label>TUN interface name</label>
+        <type>text</type>
+        <hint>tt0</hint>
+        <help>Letters/digits/underscore, 1–15 chars, must start with a letter. tt[0-9]+ pattern is reserved for this plugin.</help>
+    </field>
+    <field>
+        <id>trusttunnel.client.allowed_destinations</id>
+        <label>Allowed destinations</label>
+        <type>text</type>
+        <help>Comma-separated CIDRs to route through the tunnel in selective mode (e.g. 10.40.0.0/24).</help>
+    </field>
+</form>

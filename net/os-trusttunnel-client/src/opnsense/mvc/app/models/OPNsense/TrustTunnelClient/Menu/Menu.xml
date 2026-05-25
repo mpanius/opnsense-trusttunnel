@@ -1,0 +1,5 @@
+<menu>
+    <VPN VisibleName="VPN" cssClass="fa fa-lock fa-fw">
+        <TrustTunnelClient VisibleName="TrustTunnel Client" url="/ui/trusttunnelclient/"/>
+    </VPN>
+</menu>
