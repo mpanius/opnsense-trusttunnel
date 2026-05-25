@@ -1,0 +1,9 @@
+TrustTunnel VPN client for OPNsense.
+
+Joins a TrustTunnel endpoint: paste a tt://? deeplink, review the
+trust-gate preview, confirm, and the client establishes a TUN tunnel.
+Multi-server array with one active server.
+
+The server (endpoint-hosting) role is the separate os-trusttunnel plugin.
+
+WWW: https://github.com/mpanius/opnsense-trusttunnel

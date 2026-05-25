@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Copyright (c) 2026 Mikhail Panyushkin <mpanius@gmail.com>
+# BSD-2-Clause — see LICENSE.
+#
+# os-trusttunnel-client uninstall hook. The client role persists no
+# firewall rules (unlike the server), so cleanup is just the rendered
+# runtime config. Only removes the client subdir — the shared parent
+# /usr/local/etc/trusttunnel and /var/log/trusttunnel are left for the
+# os-trusttunnel (server) plugin if it is still installed.
+
+set -eu
+
+rm -rf /usr/local/etc/trusttunnel/client || true
+
+# Remove the shared parent dirs only if now empty (server plugin gone too).
+rmdir /usr/local/etc/trusttunnel 2>/dev/null || true
+rmdir /var/log/trusttunnel 2>/dev/null || true
+
+exit 0

@@ -1,0 +1,13 @@
+#!/bin/sh
+# os-trusttunnel-client first-run post-install hook.
+
+set -eu
+
+# Pre-create runtime directory for the rendered client TOML.
+install -d -m 0755 -o root -g wheel /usr/local/etc/trusttunnel
+install -d -m 0750 -o root -g wheel /usr/local/etc/trusttunnel/client
+
+# Shared log directory (syslog-ng routes via trusttunnelclient_syslog()).
+install -d -m 0750 -o root -g wheel /var/log/trusttunnel
+
+exit 0

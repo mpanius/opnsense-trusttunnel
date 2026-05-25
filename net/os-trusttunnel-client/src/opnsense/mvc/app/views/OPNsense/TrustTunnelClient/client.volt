@@ -140,28 +140,28 @@ $(function () {
     };
 
     // Load main client form + active_server up-front.
-    mapDataToFormUI({'frm_ClientSettings': '/api/trusttunnel/client/get'}).done(function() {
+    mapDataToFormUI({'frm_ClientSettings': '/api/trusttunnelclient/client/get'}).done(function() {
         formatTokenizersUI();
         $('.selectpicker').selectpicker('refresh');
     });
-    ajaxGet('/api/trusttunnel/client/get/', {}, function (data) {
+    ajaxGet('/api/trusttunnelclient/client/get/', {}, function (data) {
         if (data && data.trusttunnel && data.trusttunnel.client && data.trusttunnel.client.active_server) {
             window.__tt_activeServer = data.trusttunnel.client.active_server;
         }
         $("#grid-servers").UIBootgrid({
-            search: '/api/trusttunnel/client/searchServer/',
-            get:    '/api/trusttunnel/client/getServer/',
-            set:    '/api/trusttunnel/client/setServer/',
-            add:    '/api/trusttunnel/client/addServer/',
-            del:    '/api/trusttunnel/client/delServer/',
+            search: '/api/trusttunnelclient/client/searchServer/',
+            get:    '/api/trusttunnelclient/client/getServer/',
+            set:    '/api/trusttunnelclient/client/setServer/',
+            add:    '/api/trusttunnelclient/client/addServer/',
+            del:    '/api/trusttunnelclient/client/delServer/',
             options: gridOpts
         });
     });
 
     $('#btnApplyClient').on('click', function () {
         $('#btnApplyClientProgress').addClass('fa fa-spinner fa-pulse');
-        saveFormToEndpoint('/api/trusttunnel/client/set', 'frm_ClientSettings', function () {
-            ajaxCall('/api/trusttunnel/client/reconfigure', {}, function (data, status) {
+        saveFormToEndpoint('/api/trusttunnelclient/client/set', 'frm_ClientSettings', function () {
+            ajaxCall('/api/trusttunnelclient/client/reconfigure', {}, function (data, status) {
                 $('#btnApplyClientProgress').removeClass('fa fa-spinner fa-pulse');
                 BootstrapDialog.show({
                     title: "{{ lang._('Apply result') }}",
@@ -175,7 +175,7 @@ $(function () {
     $(document).on('click', '.tt-set-active', function (e) {
         e.preventDefault();
         var uuid = $(this).data('uuid');
-        ajaxCall('/api/trusttunnel/client/setActive/' + uuid, {}, function (data) {
+        ajaxCall('/api/trusttunnelclient/client/setActive/' + uuid, {}, function (data) {
             if (data && data.status === 'ok') {
                 window.__tt_activeServer = uuid;
                 $("#grid-servers").bootgrid('reload');
@@ -215,7 +215,7 @@ $(function () {
         var uri = $.trim($('#ImportUriBox').val());
         if (!uri) return;
         $('#ImportBtn').prop('disabled', true);
-        ajaxCall('/api/trusttunnel/deeplink/preview', {uri: uri}, function (data, status) {
+        ajaxCall('/api/trusttunnelclient/deeplink/preview', {uri: uri}, function (data, status) {
             $('#ImportBtn').prop('disabled', false);
             if (!data || data.status !== 'ok' || !data.preview) {
                 BootstrapDialog.show({
@@ -243,7 +243,7 @@ $(function () {
         if (!__ttUri) return;
         var $btn = $(this).prop('disabled', true);
         $.ajax({
-            url: '/api/trusttunnel/deeplink/confirmImport',
+            url: '/api/trusttunnelclient/deeplink/confirmImport',
             type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({uri: __ttUri}),
