@@ -90,6 +90,8 @@ PVE_CLEANUP
     exit "$rc"
 }
 trap cleanup_created_vm EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 remote_tmp="/var/tmp/freebsd-builder-${VMID}"
 "${SSH[@]}" "root@$PVE_HOST" bash -s -- \
@@ -208,4 +210,4 @@ GUEST_BUILD
 "${SSH[@]}" "root@$PVE_HOST" \
     "rm -f '$remote_tmp/authorized_key'; rmdir '$remote_tmp' 2>/dev/null || true"
 CREATED_VM=0
-trap - EXIT
+trap - EXIT INT TERM
