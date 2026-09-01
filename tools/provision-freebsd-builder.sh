@@ -15,7 +15,8 @@ Usage:
   provision-freebsd-builder.sh \
     --pve-host HOST --vmid ID --address CIDR --gateway IP \
     --bootstrap-address IP --ssh-public-key FILE \
-    [--storage local-zfs] [--bridge vmbr0] [--identity FILE]
+    [--storage local-zfs] [--bridge vmbr0] [--mac-address MAC] \
+    [--identity FILE]
 
 bootstrap-address — временный DHCP-адрес первого запуска. Скрипт запускается
 с машины, которая может подключиться по SSH к Proxmox от root и к временному
@@ -31,6 +32,7 @@ BOOTSTRAP_ADDRESS=""
 SSH_PUBLIC_KEY=""
 STORAGE="local-zfs"
 BRIDGE="vmbr0"
+MAC_ADDRESS=""
 IDENTITY=""
 
 while (($#)); do
@@ -43,6 +45,7 @@ while (($#)); do
         --ssh-public-key) SSH_PUBLIC_KEY=${2:?}; shift 2 ;;
         --storage) STORAGE=${2:?}; shift 2 ;;
         --bridge) BRIDGE=${2:?}; shift 2 ;;
+        --mac-address) MAC_ADDRESS=${2:?}; shift 2 ;;
         --identity) IDENTITY=${2:?}; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -56,6 +59,10 @@ done
 [[ $ADDRESS =~ ^[0-9.]+/[0-9]+$ ]] || { echo "Invalid CIDR address" >&2; exit 2; }
 [[ $GATEWAY =~ ^[0-9.]+$ && $BOOTSTRAP_ADDRESS =~ ^[0-9.]+$ ]] || {
     echo "Invalid IPv4 address" >&2
+    exit 2
+}
+[[ -z $MAC_ADDRESS || $MAC_ADDRESS =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]] || {
+    echo "Invalid MAC address" >&2
     exit 2
 }
 [[ -r $SSH_PUBLIC_KEY ]] || { echo "Cannot read SSH public key" >&2; exit 2; }
@@ -90,16 +97,14 @@ PVE_CLEANUP
     exit "$rc"
 }
 trap cleanup_created_vm EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 remote_tmp="/var/tmp/freebsd-builder-${VMID}"
 "${SSH[@]}" "root@$PVE_HOST" bash -s -- \
-    "$VMID" "$STORAGE" "$BRIDGE" "$ADDRESS" "$GATEWAY" \
+    "$VMID" "$STORAGE" "$BRIDGE" "$MAC_ADDRESS" \
     "$remote_tmp" "$FREEBSD_IMAGE_URL" "$FREEBSD_IMAGE_SHA256" <<'PVE'
 set -euo pipefail
-vmid=$1 storage=$2 bridge=$3 address=$4 gateway=$5
-tmp=$6 image_url=$7 image_sha256=$8
+vmid=$1 storage=$2 bridge=$3 mac_address=$4
+tmp=$5 image_url=$6 image_sha256=$7
 created=0
 cleanup() {
     rc=$?
@@ -124,10 +129,12 @@ actual=$(sha256sum "$tmp/image.qcow2.xz" | awk '{print $1}')
     exit 1
 }
 xz -dc "$tmp/image.qcow2.xz" >"$tmp/image.qcow2"
+net0="virtio,bridge=$bridge"
+[[ -z $mac_address ]] || net0="virtio=$mac_address,bridge=$bridge"
 qm create "$vmid" \
     --name trusttunnel-builder --description 'FreeBSD 15.1 build VM for OPNsense 26.7' \
     --cores 4 --memory 8192 --cpu host --ostype other --onboot 0 \
-    --scsihw virtio-scsi-single --net0 "virtio,bridge=$bridge" \
+    --scsihw virtio-scsi-single --net0 "$net0" \
     --serial0 socket --vga serial0 --agent enabled=1
 created=1
 qm importdisk "$vmid" "$tmp/image.qcow2" "$storage"
@@ -136,7 +143,7 @@ volume=$(qm config "$vmid" | awk '/^unused0:/ {print $2}')
 qm set "$vmid" --scsi0 "$volume,discard=on,iothread=1,ssd=1" --boot order=scsi0
 qm resize "$vmid" scsi0 40G
 qm set "$vmid" --ide2 "$storage:cloudinit" --ciuser freebsd
-qm set "$vmid" --ipconfig0 "ip=$address,gw=$gateway"
+qm set "$vmid" --ipconfig0 ip=dhcp
 PVE
 CREATED_VM=1
 
@@ -206,8 +213,9 @@ git -C "$HOME/ports" rev-parse HEAD
 "$HOME/.venv/bin/conan" --version
 GUEST_BUILD
 
-"${SSH[@]}" "root@$PVE_HOST" "qm config '$VMID'; qm status '$VMID'"
+"${SSH[@]}" "root@$PVE_HOST" \
+    "qm set '$VMID' --ipconfig0 'ip=$ADDRESS,gw=$GATEWAY'; qm config '$VMID'; qm status '$VMID'"
 "${SSH[@]}" "root@$PVE_HOST" \
     "rm -f '$remote_tmp/authorized_key'; rmdir '$remote_tmp' 2>/dev/null || true"
 CREATED_VM=0
-trap - EXIT INT TERM
+trap - EXIT
