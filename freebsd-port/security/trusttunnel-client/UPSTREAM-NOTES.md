@@ -1,78 +1,42 @@
 # `security/trusttunnel-client` — upstream notes
 
-> Step 0 discovery, captured alongside `security/trusttunnel`.
-
-## Source
+## Источник
 
 - Repo: <https://github.com/TrustTunnel/TrustTunnelClient>
-- Latest tag: `v1.1.4`
-- Build system: **CMake 3.24+ + Conan 2.0.5+ + Ninja** (NOT a Cargo workspace)
-- Languages: C++20 + C + Rust 1.85 (three subcrates inside `trusttunnel/`:
-  `settings/`, `setup_wizard/`, `deeplink-ffi/`)
+- Tag: `v1.1.5-rc.6`
+- Commit: `9c6d5104e79af0ed230d2d30a083a090c933fd48`
+- Build system: CMake 3.24+, Conan 2 и Ninja; C++/C/Rust
 
-## Reference for FreeBSD ports of CMake + Conan projects
+Tag является prerelease. FreeBSD 15.1 package устанавливается и проходит
+CLI smoke, но это не функциональная поддержка VPN.
 
-`net/quiche` does not apply here — it's pure Cargo. Closer references:
+## Conan dependencies
 
-- `net/wireguard-go` (Go CMake-less) — no
-- `security/age` (Rust simple) — no
-- TrustTunnelClient is sufficiently unusual that we author this port
-  greenfield, following standard `USES=cmake:noninja` (or `cmake` if
-  Ninja is preferred) + an explicit `do-build` that drives `make` from
-  the project's own top-level Makefile (which handles Conan bootstrap
-  + CMake configure + build internally per `~/code/TrustTunnelClient/Makefile`).
+Upstream bootstrap сам экспортирует публичные recipes, после чего
+[`tools/bootstrap-client-conan-freebsd.sh`](../../../tools/bootstrap-client-conan-freebsd.sh)
+фиксирует дополнительные исходники:
 
-## Build approach (greenfield port)
+- NativeLibsCommon `v8.1.49`, commit
+  `fd7405ee27fe040fffa094782fd4e9c5ea35fa34`;
+- DnsLibs commit `7748c6a740f80c63d478a87e4eec049984f9d8a3`.
 
-The upstream project ships a top-level `Makefile` that already does the
-right thing on a developer machine:
+Recipe patches лежат в `freebsd-port/conan/patches/` и применяются только
+после `git apply --check`. Target profile —
+`freebsd-port/conan/profiles/freebsd15-amd64`.
 
-```
-make init           # one-time hooks
-make bootstrap_deps # exports AdGuard Conan recipes to local cache
-make all            # bootstrap + cmake + build client + setup_wizard
-```
+## Source patches
 
-On the build VM we run `make all` once, then collect the resulting
-binaries from `build/trusttunnel/trusttunnel_client` and
-`build/trusttunnel/setup_wizard/trusttunnel_setup_wizard`.
+Port patches в `files/` минимально адаптируют platform guards, socket/ping
+code, CMake и network monitor для компиляции FreeBSD. Они не добавляют
+полноценный FreeBSD TUN backend. В upstream `net/src/os_tunnel.cpp`
+`make_vpn_tunnel()` поддерживает Windows, macOS и Linux; ветка FreeBSD
+возвращает `nullptr`.
 
-**Caveat:** Conan recipes require network access during build, which
-contradicts `bsd.port.mk`'s default `NO_FETCH`-style policy. Practical
-solutions:
+Следствие: пакет нельзя описывать как готовый system-wide VPN client на
+OPNsense. Для объявления поддержки нужны upstream/backend change и E2E на
+чистой OPNsense 26.7 VM с интерфейсом, маршрутами, DNS и реальным трафиком.
 
-1. Pre-populate Conan cache before `make package` (developer runs
-   `make bootstrap_deps` once outside the port, then port build skips
-   bootstrap via `SKIP_BOOTSTRAP=1`). This is what we'll do for v1.
-2. Future: write a true FreeBSD port using `USES=cmake conan` once
-   FreeBSD ports tree adds Conan 2 support.
+## Устанавливаемый файл
 
-For v1: this port assumes the build VM has Conan recipes already cached
-(documented in `~/code/opnsense-trusttunnel/freebsd-port/README.md`).
-
-## Conan deps
-
-The TrustTunnelClient `conanfile.py` requires AdGuard private recipes:
-
-- `dns-libs/2.8.51@adguard/oss`
-- `native_libs_common/8.1.28@adguard/oss`
-- `klib/2021-04-06@adguard/oss`
-- `ldns/2021-03-29@adguard/oss`
-- `libevent/2.1.11@adguard/oss`
-- `nghttp2/1.56.0@adguard/oss`
-- `quiche/0.17.1@adguard/oss` — note: different from server-side
-  (uses AdGuard's fork of quiche, not Cloudflare's mainline 0.24.x)
-- `openssl/boring-2024-09-13@adguard/oss`
-
-These are exported via `scripts/bootstrap_conan_deps.py` in the
-TrustTunnelClient repo. Conan profiles in `conan/` directory.
-
-## Binaries produced
-
-- `trusttunnel_client` → `/usr/local/sbin/trusttunnel_client`
-- `trusttunnel_setup_wizard` (client-side wizard, different binary from
-  server's `setup_wizard`) → installed under same name in client port,
-  collision avoided via separate `${PREFIX}/sbin/trusttunnel_client_setup_wizard`
-
-For v1 we only install `trusttunnel_client` — the client wizard is not
-used by the os-trusttunnel plugin (plugin renders config from PHP).
+Port устанавливает только `/usr/local/sbin/trusttunnel_client`. Wizard не
+нужен OPNsense plugin, который генерирует конфигурацию самостоятельно.

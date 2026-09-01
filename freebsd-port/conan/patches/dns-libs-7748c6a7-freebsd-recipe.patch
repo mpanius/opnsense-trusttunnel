@@ -1,0 +1,28 @@
+diff --git a/conanfile.py b/conanfile.py
+index 9c3b5e9..b74f4e8 100644
+--- a/conanfile.py
++++ b/conanfile.py
+@@ -1,6 +1,6 @@
+ from conan import ConanFile
+ from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+-from conan.tools.files import patch, copy, update_conandata
++from conan.tools.files import patch, copy, replace_in_file, update_conandata
+ from conan.tools.scm import Git
+ from os.path import join
+ import re, os, shutil
+@@ -109,6 +109,15 @@ class DnsLibsConan(ConanFile):
+             git.checkout(described.group(1))
+         else:
+             git.fetch_commit(self.vcs_url, f"v{version}")
++        self._patch_freebsd_sources()
++
++    def _patch_freebsd_sources(self):
++        replace_in_file(
++            self,
++            join(self.source_folder, "common/sys.cpp"),
++            "#if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)",
++            "#if defined(__linux__) || defined(__LINUX__) || defined(__MACH__) || defined(__FreeBSD__)",
++        )
+ 
+     def generate(self):
+         deps = CMakeDeps(self)

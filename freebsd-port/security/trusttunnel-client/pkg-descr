@@ -1,9 +1,9 @@
 TrustTunnel VPN client (CLI).
 
 C++/Rust client library + `trusttunnel_client` binary that connects to a
-TrustTunnel endpoint. Supports system-wide TUN/Wintun tunnel and SOCKS5
-proxy, split tunneling via domain/IP exclusion lists, and custom DNS
-upstreams (DoH/DoT/DoQ).
+TrustTunnel endpoint. Upstream supports system-wide tunnels and SOCKS5 on
+selected platforms, but v1.1.5-rc.6 has no FreeBSD TUN backend. This FreeBSD
+package is experimental until a functional OPNsense E2E test passes.
 
 Pair with `security/trusttunnel` for the server-side daemon.
 

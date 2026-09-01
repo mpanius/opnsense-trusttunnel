@@ -1,0 +1,148 @@
+diff --git a/conanfile.py b/conanfile.py
+index c94fec7..b75fa83 100644
+--- a/conanfile.py
++++ b/conanfile.py
+@@ -1,6 +1,6 @@
+ from conan import ConanFile
+ from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+-from conan.tools.files import copy
++from conan.tools.files import copy, replace_in_file
+ from conan.tools.scm import Git
+ from os.path import join
+ import re, os, shutil
+@@ -74,6 +74,126 @@ class NativeLibsCommon(ConanFile):
+         git = Git(self)
+         git.clone(url=self.vcs_url, target=".")
+         git.checkout(ref)
++        self._patch_freebsd_sources()
++
++    def _replace(self, relative_path, search, replacement):
++        replace_in_file(self, join(self.source_folder, relative_path), search, replacement)
++
++    def _patch_freebsd_sources(self):
++        self._replace(
++            "common/include/common/socket_address.h",
++            "#include <event2/util.h> // for sockaddr, sockaddr_storage, getaddrinfo, getnameinfo",
++            "#include <event2/util.h> // for sockaddr, sockaddr_storage, getaddrinfo, getnameinfo\n"
++            "#include <netinet/in.h>",
++        )
++        self._replace(
++            "common/include/common/socket_address.h",
++            "#ifdef __APPLE__\n    uint8_t sa_len;",
++            "#if defined(__APPLE__) || defined(__FreeBSD__)\n    uint8_t sa_len;",
++        )
++        self._replace(
++            "common/include/common/cidr_range.h",
++            "#pragma once\n",
++            "#pragma once\n\n#include <sys/socket.h>\n#include <netinet/in.h>\n",
++        )
++        self._replace(
++            "common/net_utils.cpp",
++            "#include <fstream>\n#include <net/if.h> // For if_nametoindex/if_indextoname",
++            "#include <fstream>\n#include <net/if.h> // For if_nametoindex/if_indextoname\n"
++            "#ifdef __FreeBSD__\n#include <ifaddrs.h>\n#endif",
++        )
++        self._replace(
++            "common/net_utils.cpp",
++            "Error<utils::NetUtilsError> utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {\n"
++            "#if defined(__linux__)",
++            "Error<utils::NetUtilsError> utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {\n"
++            "#if defined(__linux__) || defined(__FreeBSD__)",
++        )
++        self._replace(
++            "common/net_utils.cpp",
++            "#if defined(__linux__)\n"
++            "    (void) family;\n"
++            "    int ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, strlen(if_name));\n"
++            "    if (ret != 0) {\n"
++            "        return make_error(NetUtilsError::AE_BIND_ERROR,\n"
++            "                AG_FMT(\"fd {} to interface {}: ({}) {}\", fd, if_name, errno, strerror(errno)));\n"
++            "    }\n"
++            "    return {};\n"
++            "#else",
++            "#if defined(__linux__)\n"
++            "    (void) family;\n"
++            "    int ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, strlen(if_name));\n"
++            "    if (ret != 0) {\n"
++            "        return make_error(NetUtilsError::AE_BIND_ERROR,\n"
++            "                AG_FMT(\"fd {} to interface {}: ({}) {}\", fd, if_name, errno, strerror(errno)));\n"
++            "    }\n"
++            "    return {};\n"
++            "#elif defined(__FreeBSD__)\n"
++            "    if (family != AF_INET && family != AF_INET6) {\n"
++            "        return make_error(NetUtilsError::AE_UNSUPPORTED_FAMILY, AG_FMT(\"family: {}\", family));\n"
++            "    }\n"
++            "    struct ifaddrs *interfaces = nullptr;\n"
++            "    if (getifaddrs(&interfaces) != 0) {\n"
++            "        return make_error(NetUtilsError::AE_BIND_ERROR,\n"
++            "                AG_FMT(\"getifaddrs: ({}) {}\", errno, strerror(errno)));\n"
++            "    }\n"
++            "    int ret = -1;\n"
++            "    for (const auto *ifa = interfaces; ifa != nullptr; ifa = ifa->ifa_next) {\n"
++            "        if (ifa->ifa_name != nullptr && ifa->ifa_addr != nullptr\n"
++            "                && strcmp(ifa->ifa_name, if_name) == 0 && ifa->ifa_addr->sa_family == family) {\n"
++            "            ret = ::bind(fd, ifa->ifa_addr, ifa->ifa_addr->sa_len);\n"
++            "            break;\n"
++            "        }\n"
++            "    }\n"
++            "    freeifaddrs(interfaces);\n"
++            "    if (ret != 0) {\n"
++            "        return make_error(NetUtilsError::AE_BIND_ERROR,\n"
++            "                AG_FMT(\"fd {} to interface {}: ({}) {}\", fd, if_name, errno, strerror(errno)));\n"
++            "    }\n"
++            "    return {};\n"
++            "#else",
++        )
++        self._replace(
++            "common/file.cpp",
++            "#if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)",
++            "#if defined(__linux__) || defined(__LINUX__) || defined(__MACH__) || defined(__FreeBSD__)",
++        )
++        self._replace(
++            "common/time_utils.cpp",
++            "#else\n    tzset();\n    return timezone;\n#endif",
++            "#elif defined(__FreeBSD__)\n"
++            "    tzset();\n"
++            "    time_t now = time(nullptr);\n"
++            "    struct tm local = {};\n"
++            "    localtime_r(&now, &local);\n"
++            "    return -local.tm_gmtoff;\n"
++            "#else\n    tzset();\n    return timezone;\n#endif",
++        )
++        self._replace(
++            "common/utils.cpp",
++            "#ifdef _WIN32\n#include <process.h>",
++            "#ifdef __FreeBSD__\n#include <pthread_np.h>\n"
++            "uint32_t utils::gettid(void) {\n"
++            "    return (uint32_t) pthread_getthreadid_np();\n"
++            "}\n#endif // __FreeBSD__\n\n#ifdef _WIN32\n#include <process.h>",
++        )
++        self._replace(
++            "common/network_monitor.cpp",
++            "#ifdef _WIN32\n    return true;\n#endif // _WIN32\n}",
++            "#ifdef _WIN32\n    return true;\n#endif // _WIN32\n"
++            "#ifdef __FreeBSD__\n    return false;\n#endif // __FreeBSD__\n}",
++        )
++        self._replace(
++            "common/system_error.cpp",
++            "#if defined(__MACH__) || defined(__linux__)",
++            "#if defined(__MACH__) || defined(__linux__) || defined(__FreeBSD__)",
++        )
++        self._replace(
++            "common/CMakeLists.txt",
++            "if (NOT ANDROID)\n        target_link_libraries(${PROJECT_NAME} resolv)\n    endif()",
++            "if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL \"FreeBSD\")\n"
++            "        target_link_libraries(${PROJECT_NAME} resolv)\n    endif()",
++        )
+ 
+     def generate(self):
+         tc = CMakeToolchain(self)
+@@ -118,7 +238,7 @@ class NativeLibsCommon(ConanFile):
+         if self.settings.os == "Windows":
+             self.cpp_info.system_libs = ["ws2_32", "iphlpapi", "ntdll", "fwpuclnt"]
+         else:
+-            if self.settings.os != "Android":
++            if self.settings.os not in ("Android", "FreeBSD"):
+                 self.cpp_info.system_libs = ["resolv"]
+             if self.settings.os in ["Macos", "iOS"]:
+                 self.cpp_info.frameworks = ["Network"]

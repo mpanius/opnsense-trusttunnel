@@ -1,4 +1,4 @@
-TrustTunnel VPN endpoint daemon.
+TrustTunnel VPN endpoint daemon built from upstream v1.1.0.
 
 A modern open-source VPN server developed by AdGuard. By design,
 TrustTunnel traffic is indistinguishable from regular HTTPS, allowing

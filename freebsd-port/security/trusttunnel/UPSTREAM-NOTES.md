@@ -1,4 +1,4 @@
-# `security/trusttunnel` — upstream notes (Step 0 discovery)
+# `security/trusttunnel` — upstream notes
 
 > Captured **before** writing this port's Makefile, per
 > `docs/plans/2026-05-23-opnsense-trusttunnel-plugin.md` (Task 2 Step 0).
@@ -22,12 +22,13 @@ Source of recipes (`USES`, BoringSSL vendoring, `BORING_BSSL_RUST_CPPLIB`,
 
 ## Version reconciliation
 
-**TrustTunnel `Cargo.lock` (this workspace at upstream tag v1.0.33):**
+**TrustTunnel `Cargo.lock` (upstream tag v1.1.0, commit
+`9f11ab2f47d971fd8ba507470a14df2232b2f57d`):**
 
 | Crate | Version |
 | --- | --- |
-| `quiche` | **0.24.6** |
-| `boring` | 4.19.0 |
+| `quiche` | **0.24.9** |
+| `boring` | 4.22.0 |
 
 **`net/quiche` port version**: 0.24.5 (one PATCH behind).
 
@@ -56,8 +57,8 @@ hasn't changed.
 2. **`RUSTFLAGS` for i386** — `add sse,sse2 target-features only on i386`.
    We carry this verbatim (no harm on amd64).
 
-No additional TrustTunnel-specific patches expected for v1; if cargo
-build fails, capture errors here and iterate.
+Текущий v1.1.0 package собран под FreeBSD 15.1; полный набор vendored crates
+зафиксирован в `Makefile` и `distinfo`.
 
 ## Cargo workspace targets
 
