@@ -28,9 +28,11 @@ tools/provision-freebsd-builder.sh \
 
 ## Conan overlay клиента
 
-Checkout должен точно соответствовать `v1.1.5-rc.6`. Скрипт экспортирует
-зафиксированные NativeLibsCommon/DnsLibs recipes и накладывает проверяемые
-FreeBSD-патчи:
+Checkout должен точно соответствовать `v1.1.5-rc.6`. Скрипт устанавливает
+зафиксированный FreeBSD 15 profile как `default` в выбранный `CONAN_HOME`,
+экспортирует NativeLibsCommon/DnsLibs recipes и накладывает проверяемые
+FreeBSD-патчи. Если существующий default profile отличается, скрипт
+останавливается, не перезаписывая его:
 
 ```sh
 git clone --branch v1.1.5-rc.6 --depth 1 \

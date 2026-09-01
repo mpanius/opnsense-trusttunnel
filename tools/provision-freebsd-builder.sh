@@ -68,6 +68,29 @@ if "${SSH[@]}" "root@$PVE_HOST" "qm status '$VMID'" >/dev/null 2>&1; then
     exit 1
 fi
 
+CREATED_VM=0
+cleanup_created_vm() {
+    local rc=$?
+    trap - EXIT
+    if ((rc != 0 && CREATED_VM == 1)); then
+        echo "Provisioning failed; removing VMID $VMID created by this run" >&2
+        set +e
+        "${SSH[@]}" "root@$PVE_HOST" bash -s -- "$VMID" <<'PVE_CLEANUP'
+set -euo pipefail
+vmid=$1
+name=$(qm config "$vmid" | awk '/^name:/ {print $2}')
+[[ $name == trusttunnel-builder ]] || {
+    echo "Refusing cleanup: VMID $vmid has unexpected name '$name'" >&2
+    exit 1
+}
+qm stop "$vmid" --skiplock 1 >/dev/null 2>&1 || true
+qm destroy "$vmid" --purge 1 --destroy-unreferenced-disks 1
+PVE_CLEANUP
+    fi
+    exit "$rc"
+}
+trap cleanup_created_vm EXIT
+
 remote_tmp="/var/tmp/freebsd-builder-${VMID}"
 "${SSH[@]}" "root@$PVE_HOST" bash -s -- \
     "$VMID" "$STORAGE" "$BRIDGE" "$ADDRESS" "$GATEWAY" \
@@ -75,8 +98,23 @@ remote_tmp="/var/tmp/freebsd-builder-${VMID}"
 set -euo pipefail
 vmid=$1 storage=$2 bridge=$3 address=$4 gateway=$5
 tmp=$6 image_url=$7 image_sha256=$8
+created=0
+cleanup() {
+    rc=$?
+    rm -f "$tmp/image.qcow2.xz" "$tmp/image.qcow2"
+    if ((rc != 0 && created == 1)); then
+        name=$(qm config "$vmid" | awk '/^name:/ {print $2}')
+        if [[ $name == trusttunnel-builder ]]; then
+            qm stop "$vmid" --skiplock 1 >/dev/null 2>&1 || true
+            qm destroy "$vmid" --purge 1 --destroy-unreferenced-disks 1
+        else
+            echo "Refusing cleanup: VMID $vmid has unexpected name '$name'" >&2
+        fi
+    fi
+    exit "$rc"
+}
 mkdir -p "$tmp"
-trap 'rm -f "$tmp/image.qcow2.xz" "$tmp/image.qcow2"' EXIT
+trap cleanup EXIT
 curl -fL --retry 3 -o "$tmp/image.qcow2.xz" "$image_url"
 actual=$(sha256sum "$tmp/image.qcow2.xz" | awk '{print $1}')
 [[ $actual == "$image_sha256" ]] || {
@@ -89,6 +127,7 @@ qm create "$vmid" \
     --cores 4 --memory 8192 --cpu host --ostype other --onboot 0 \
     --scsihw virtio-scsi-single --net0 "virtio,bridge=$bridge" \
     --serial0 socket --vga serial0 --agent enabled=1
+created=1
 qm importdisk "$vmid" "$tmp/image.qcow2" "$storage"
 volume=$(qm config "$vmid" | awk '/^unused0:/ {print $2}')
 [[ -n $volume ]]
@@ -97,6 +136,7 @@ qm resize "$vmid" scsi0 40G
 qm set "$vmid" --ide2 "$storage:cloudinit" --ciuser freebsd
 qm set "$vmid" --ipconfig0 "ip=$address,gw=$gateway"
 PVE
+CREATED_VM=1
 
 scp_args=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 [[ -z $IDENTITY ]] || scp_args+=(-i "$IDENTITY")
@@ -136,12 +176,12 @@ for _ in {1..60}; do
     sleep 5
 done
 "${SSH[@]}" "freebsd@$static_ip" sh -s -- "$PORTS_COMMIT" <<'GUEST_BUILD'
-set -euo pipefail
+set -eu
 ports_commit=$1
 su -m root -c 'pkg bootstrap -f -y'
 su -m root -c 'pkg install -y bash cmake git gmake llvm19 ninja perl5 pkgconf portfmt py313-sqlite3 python313 qemu-guest-agent rust'
 su -m root -c 'sysrc qemu_guest_agent_enable=YES && service qemu-guest-agent start'
-if [[ ! -d "$HOME/ports/.git" ]]; then
+if [ ! -d "$HOME/ports/.git" ]; then
     git clone --filter=blob:none --branch 2026Q3 https://git.FreeBSD.org/ports.git "$HOME/ports"
 fi
 git -C "$HOME/ports" fetch origin "$ports_commit"
@@ -149,13 +189,11 @@ git -C "$HOME/ports" checkout --detach "$ports_commit"
 python3.13 -m venv "$HOME/.venv"
 "$HOME/.venv/bin/pip" install --disable-pip-version-check 'conan==2.32.0'
 
-expected=(
-    bash-5.3.15 cmake-3.31.12 git-2.54.0 gmake-4.4.1 llvm19-19.1.7_4
-    'ninja-1.13.2,4' perl5-5.42.3 'pkgconf-2.4.3_1,1' portfmt-1.1.6
-    py313-sqlite3-3.13.15_10 python313-3.13.15
-    qemu-guest-agent-11.0.2 rust-1.96.1
-)
-for package in "${expected[@]}"; do
+for package in \
+    bash-5.3.15 cmake-3.31.12 git-2.54.0 gmake-4.4.1 llvm19-19.1.7_4 \
+    'ninja-1.13.2,4' perl5-5.42.3 'pkgconf-2.4.3_1,1' portfmt-1.1.6 \
+    py313-sqlite3-3.13.15_10 python313-3.13.15 \
+    qemu-guest-agent-11.0.2 rust-1.96.1; do
     pkg info -e "$package" || {
         echo "Unexpected toolchain version; missing $package" >&2
         exit 1
@@ -167,3 +205,7 @@ git -C "$HOME/ports" rev-parse HEAD
 GUEST_BUILD
 
 "${SSH[@]}" "root@$PVE_HOST" "qm config '$VMID'; qm status '$VMID'"
+"${SSH[@]}" "root@$PVE_HOST" \
+    "rm -f '$remote_tmp/authorized_key'; rmdir '$remote_tmp' 2>/dev/null || true"
+CREATED_VM=0
+trap - EXIT

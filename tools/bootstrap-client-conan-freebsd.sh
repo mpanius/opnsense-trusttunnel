@@ -21,10 +21,23 @@ EOF
 
 [[ $# -ge 1 && $# -le 2 ]] || { usage >&2; exit 2; }
 CLIENT_SOURCE=$(cd "$1" && pwd)
-CONAN=${2:-conan}
+CONAN_INPUT=${2:-conan}
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+PROFILE="$REPO_ROOT/freebsd-port/conan/profiles/freebsd15-amd64"
 
-[[ $($CONAN --version) == "Conan version 2."* ]] || {
+case "$CONAN_INPUT" in
+    */*) CONAN=$(cd "$(dirname "$CONAN_INPUT")" && pwd)/$(basename "$CONAN_INPUT") ;;
+    *) CONAN=$(command -v "$CONAN_INPUT" || true) ;;
+esac
+[[ -n $CONAN && -x $CONAN ]] || {
+    echo "Не найден исполняемый файл Conan: $CONAN_INPUT" >&2
+    exit 1
+}
+CONAN_BIN_DIR=$(dirname "$CONAN")
+CONAN_HOME=${CONAN_HOME:-"$HOME/.conan2"}
+export CONAN_HOME
+
+[[ $("$CONAN" --version) == "Conan version 2."* ]] || {
     echo "Требуется Conan 2" >&2
     exit 1
 }
@@ -33,7 +46,16 @@ REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
     exit 1
 }
 
-python3.13 "$CLIENT_SOURCE/scripts/bootstrap_conan_deps.py"
+mkdir -p "$CONAN_HOME/profiles"
+if [[ -f $CONAN_HOME/profiles/default ]] && \
+        ! cmp -s "$PROFILE" "$CONAN_HOME/profiles/default"; then
+    echo "CONAN_HOME содержит несовместимый default profile: $CONAN_HOME" >&2
+    exit 1
+fi
+install -m 0644 "$PROFILE" "$CONAN_HOME/profiles/default"
+
+PATH="$CONAN_BIN_DIR:$PATH" \
+    python3.13 "$CLIENT_SOURCE/scripts/bootstrap_conan_deps.py"
 
 workdir=$(mktemp -d "${TMPDIR:-/tmp}/trusttunnel-conan.XXXXXX")
 trap 'rm -rf "$workdir"' EXIT
