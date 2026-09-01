@@ -11,7 +11,7 @@ LICENSE_FILE=	${WRKSRC}/LICENSE
 
 BUILD_DEPENDS=	git>0:devel/git
 
-USES=		cargo llvm:build,lib
+USES=		cargo llvm:build
 USE_GITHUB=	yes
 GH_ACCOUNT=	TrustTunnel
 GH_PROJECT=	TrustTunnel

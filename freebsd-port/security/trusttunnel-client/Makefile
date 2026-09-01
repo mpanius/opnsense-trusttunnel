@@ -15,7 +15,7 @@ BUILD_DEPENDS=	cargo:lang/rust \
 		ninja:devel/ninja \
 		python313>=3.13:lang/python313
 
-USES=		gmake llvm:build,lib
+USES=		gmake llvm:build
 USE_GITHUB=	yes
 GH_ACCOUNT=	TrustTunnel
 GH_PROJECT=	TrustTunnelClient
