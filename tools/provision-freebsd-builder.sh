@@ -67,22 +67,31 @@ done
 }
 [[ -r $SSH_PUBLIC_KEY ]] || { echo "Cannot read SSH public key" >&2; exit 2; }
 
-SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-[[ -z $IDENTITY ]] || SSH+=(-i "$IDENTITY")
+PVE_SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+[[ -z $IDENTITY ]] || PVE_SSH+=(-i "$IDENTITY")
 
-if "${SSH[@]}" "root@$PVE_HOST" "qm status '$VMID'" >/dev/null 2>&1; then
+if "${PVE_SSH[@]}" "root@$PVE_HOST" "qm status '$VMID'" >/dev/null 2>&1; then
     echo "VMID $VMID already exists; refusing to modify it" >&2
     exit 1
 fi
+
+GUEST_KNOWN_HOSTS=$(mktemp "${TMPDIR:-/tmp}/trusttunnel-builder-known-hosts.XXXXXX")
+GUEST_SSH=(
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+    -o "UserKnownHostsFile=$GUEST_KNOWN_HOSTS"
+    -o "HostKeyAlias=trusttunnel-builder-$VMID"
+)
+[[ -z $IDENTITY ]] || GUEST_SSH+=(-i "$IDENTITY")
 
 CREATED_VM=0
 cleanup_created_vm() {
     local rc=$?
     trap - EXIT
+    rm -f "$GUEST_KNOWN_HOSTS"
     if ((rc != 0 && CREATED_VM == 1)); then
         echo "Provisioning failed; removing VMID $VMID created by this run" >&2
         set +e
-        "${SSH[@]}" "root@$PVE_HOST" bash -s -- "$VMID" <<'PVE_CLEANUP'
+        "${PVE_SSH[@]}" "root@$PVE_HOST" bash -s -- "$VMID" <<'PVE_CLEANUP'
 set -euo pipefail
 vmid=$1
 name=$(qm config "$vmid" | awk '/^name:/ {print $2}')
@@ -99,7 +108,7 @@ PVE_CLEANUP
 trap cleanup_created_vm EXIT
 
 remote_tmp="/var/tmp/freebsd-builder-${VMID}"
-"${SSH[@]}" "root@$PVE_HOST" bash -s -- \
+"${PVE_SSH[@]}" "root@$PVE_HOST" bash -s -- \
     "$VMID" "$STORAGE" "$BRIDGE" "$MAC_ADDRESS" \
     "$remote_tmp" "$FREEBSD_IMAGE_URL" "$FREEBSD_IMAGE_SHA256" <<'PVE'
 set -euo pipefail
@@ -150,21 +159,21 @@ CREATED_VM=1
 scp_args=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 [[ -z $IDENTITY ]] || scp_args+=(-i "$IDENTITY")
 scp "${scp_args[@]}" "$SSH_PUBLIC_KEY" "root@$PVE_HOST:$remote_tmp/authorized_key"
-"${SSH[@]}" "root@$PVE_HOST" \
+"${PVE_SSH[@]}" "root@$PVE_HOST" \
     "qm set '$VMID' --sshkeys '$remote_tmp/authorized_key' && qm start '$VMID'"
 
 echo "Waiting for bootstrap SSH at $BOOTSTRAP_ADDRESS ..."
 for _ in {1..60}; do
-    if "${SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" true 2>/dev/null; then
+    if "${GUEST_SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" true 2>/dev/null; then
         break
     fi
     sleep 5
 done
-"${SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" true
+"${GUEST_SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" true
 
 static_ip=${ADDRESS%/*}
 prefix=${ADDRESS#*/}
-"${SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" sh -s -- \
+"${GUEST_SSH[@]}" "freebsd@$BOOTSTRAP_ADDRESS" sh -s -- \
     "$static_ip" "$prefix" "$GATEWAY" <<'GUEST_NET'
 set -eu
 static_ip=$1 prefix=$2 gateway=$3
@@ -179,12 +188,12 @@ GUEST_NET
 
 echo "Waiting for static SSH at $static_ip ..."
 for _ in {1..60}; do
-    if "${SSH[@]}" "freebsd@$static_ip" true 2>/dev/null; then
+    if "${GUEST_SSH[@]}" "freebsd@$static_ip" true 2>/dev/null; then
         break
     fi
     sleep 5
 done
-"${SSH[@]}" "freebsd@$static_ip" sh -s -- "$PORTS_COMMIT" <<'GUEST_BUILD'
+"${GUEST_SSH[@]}" "freebsd@$static_ip" sh -s -- "$PORTS_COMMIT" <<'GUEST_BUILD'
 set -eu
 ports_commit=$1
 su -m root -c 'pkg bootstrap -f -y'
@@ -213,9 +222,10 @@ git -C "$HOME/ports" rev-parse HEAD
 "$HOME/.venv/bin/conan" --version
 GUEST_BUILD
 
-"${SSH[@]}" "root@$PVE_HOST" \
+"${PVE_SSH[@]}" "root@$PVE_HOST" \
     "qm set '$VMID' --ipconfig0 'ip=$ADDRESS,gw=$GATEWAY'; qm config '$VMID'; qm status '$VMID'"
-"${SSH[@]}" "root@$PVE_HOST" \
+"${PVE_SSH[@]}" "root@$PVE_HOST" \
     "rm -f '$remote_tmp/authorized_key'; rmdir '$remote_tmp' 2>/dev/null || true"
 CREATED_VM=0
+rm -f "$GUEST_KNOWN_HOSTS"
 trap - EXIT
