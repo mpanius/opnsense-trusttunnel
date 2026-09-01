@@ -20,3 +20,9 @@ trusttunnel-repo-priv.pem
 
 # Build VMs notes (kept locally for now)
 build/local-notes/
+docs/builds/
+
+# Generated caches
+__pycache__/
+*.pyc
+.ruff_cache/

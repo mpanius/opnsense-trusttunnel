@@ -1,4 +1,7 @@
-OPNsense API snapshot — captured Sat May 23 02:24:32 UTC 2026
+OPNsense API snapshot — historical, captured Sat May 23 02:24:32 UTC 2026
+
+Этот snapshot сохранён как архив разработки для OPNsense 26.1.8_5 и не
+подтверждает совместимость текущей цели OPNsense 26.7.
 ================================================
 
 --- OPNsense / FreeBSD versions ---

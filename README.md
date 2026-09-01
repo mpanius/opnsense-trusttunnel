@@ -1,97 +1,52 @@
-# os-trusttunnel — OPNsense plugins for TrustTunnel VPN
+# TrustTunnel для OPNsense
 
 [![License: BSD-2-Clause](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
 
-**Two** OPNsense plugins wrapping the
-[TrustTunnel](https://github.com/TrustTunnel/TrustTunnel) VPN, split by
-role so a box only pulls the binary it actually needs:
+Репозиторий содержит два независимых плагина OPNsense и overlay-порты
+FreeBSD для их бинарных зависимостей:
 
-| Plugin | Role | Depends on | Menu |
-|--------|------|------------|------|
-| `os-trusttunnel` | **Server** — host an endpoint | `trusttunnel` (Rust, builds cleanly) + `qrencode` | VPN → TrustTunnel |
-| `os-trusttunnel-client` | **Client** — join an endpoint | `trusttunnel-client` (C++/Rust, ~30 FreeBSD patches) | VPN → TrustTunnel Client |
+| Компонент | Назначение | Upstream |
+| --- | --- | --- |
+| `net/os-trusttunnel` | управление endpoint через OPNsense Web UI | `TrustTunnel v1.1.0` |
+| `net/os-trusttunnel-client` | конфигурация клиентского процесса | `TrustTunnelClient v1.1.5-rc.6` |
+| `freebsd-port/security/` | сборка пакетов `trusttunnel*` | FreeBSD 15.1 / OPNsense 26.7 |
 
-Install one, the other, or both. A router that only hosts an endpoint
-never pulls the fragile client binary; a router that only joins never
-pulls the server stack. Asymmetric site-to-site in v2, full mesh later.
+## Статус
 
-Status: **v2 functional end-to-end** — FreeBSD client `trusttunnel_client`
-builds + reaches `VPN_SS_CONNECTED` + forwards real traffic through the
-tunnel (sustained 114 Mbit/s, 197 Mbit/s single-stream — see
-[`docs/bandwidth-benchmark.md`](docs/bandwidth-benchmark.md)).
-[`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md) documents
-the ~30 cumulative FreeBSD-portation patches.
+Пакеты endpoint и клиента воспроизводимо собираются под ABI
+`FreeBSD:15:amd64`, устанавливаются на FreeBSD 15.1 и проходят CLI-проверки
+`--version`/`--help`. Клиентская версия является prerelease.
 
-See [`docs/`](docs/) for design, release, and patch documentation.
+Полноценная работа клиента как системного VPN на FreeBSD пока **не
+подтверждена**: в upstream `v1.1.5-rc.6` нет реализации FreeBSD TUN backend.
+Не используйте этот репозиторий как готовое production-решение до успешного
+OPNsense E2E-теста с реальным трафиком. Исторические результаты для v1.0.x в
+`docs/` не являются подтверждением текущей версии.
 
-## Repository layout
+## Возможности плагинов
 
-```
-net/os-trusttunnel/         — server plugin (PLUGIN_NAME=trusttunnel)
-net/os-trusttunnel-client/  — client plugin (PLUGIN_NAME=trusttunnel-client)
-freebsd-port/security/      — the two FreeBSD ports producing the binaries
-docs/                       — shared documentation
-dist/                       — built .pkg artifacts (also on GitHub Releases)
-```
+- Endpoint: выбор сертификата OPNsense, управление пользователями, экспорт
+  deeplink/QR, конфигурация `configd` и управляемое WAN-правило.
+- Client: импорт deeplink с предварительным просмотром, выбор активного
+  сервера и генерация конфигурации клиента.
+- Раздельные пакеты: endpoint не тянет клиентскую зависимость и наоборот.
 
-Each `net/<plugin>/` dir is a standard OPNsense plugin (`Makefile` +
-`src/`). State is namespaced per plugin: server writes
-`<OPNsense><trusttunnel>`, client writes `<OPNsense><trusttunnelclient>`
-— no collision on HA-sync or uninstall.
+## Сборка и установка
 
-## Features
+Процедура создания FreeBSD builder и сборки обоих портов описана в
+[`freebsd-port/README.md`](freebsd-port/README.md). Проверяемая установка на
+OPNsense приведена в [`docs/install.md`](docs/install.md), выпуск — в
+[`docs/release.md`](docs/release.md).
 
-### Server plugin (`os-trusttunnel`)
+Собранные `.pkg` не хранятся в Git. До появления проверенного GitHub Release
+пакеты следует собирать самостоятельно; команды загрузки несуществующих
+артефактов намеренно не публикуются.
 
-- Host a TrustTunnel endpoint: pick a cert from System → Trust →
-  Certificates (works with `os-acme-client`-issued certs), define users,
-  Apply. Per-user **Export deep-link** with QR code.
-- **HA cluster sync** — `trusttunnel_xmlrpc_sync()` ships the
-  `<trusttunnel>` subtree to the standby on CARP failover; passwords
-  stripped via `nosync="1"`.
-- **Auto-firewall rule** — creates and tracks one inbound pass rule on
-  WAN for the listen port, marked
-  `<plugin_managed>os-trusttunnel</plugin_managed>`.
-- **Per-user revocation** — drop a user from the bootgrid; endpoint
-  restarts and existing connections fail on next handshake.
+## Связанные проекты
 
-### Client plugin (`os-trusttunnel-client`)
+- [TrustTunnel](https://github.com/TrustTunnel/TrustTunnel)
+- [TrustTunnelClient](https://github.com/TrustTunnel/TrustTunnelClient)
+- [TrustTunnel-Keenetic](https://github.com/artemevsevev/TrustTunnel-Keenetic)
 
-- Join an endpoint: paste a `tt://?...` deep-link, preview the decoded
-  fields as a trust gate, Confirm, Apply. Multi-server array with one
-  Active server.
-- **TUN device** — registers the `tt<N>` pattern in Interfaces →
-  Assignments via `trusttunnelclient_devices()`.
-- **HA cluster sync** — ships the `<trusttunnelclient>` subtree.
-
-## Compatibility
-
-- OPNsense CE 25.x and 26.1.x (FreeBSD 14.x base)
-- Server binary (`trusttunnel_endpoint`) — built from
-  `security/trusttunnel` FreeBSD port. Upstream FreeBSD support merged in
-  TrustTunnel PR #28 (Feb 2026).
-- Client binary (`trusttunnel_client`) — built from
-  `security/trusttunnel-client` FreeBSD port with ~30 patches applied
-  to NativeLibsCommon, DnsLibs, and TrustTunnelClient source. Patches
-  documented in [`docs/freebsd-port-patches.md`](docs/freebsd-port-patches.md);
-  upstream PRs pending.
-
-## Install
-
-During early development the plugin is distributed from a self-hosted
-signed pkg repo (see `docs/install.md` once it lands — TBD until v1
-release). Direct install:
-
-```sh
-pkg add ./os-trusttunnel-X.Y.Z.pkg
-```
-
-## See also
-
-- [TrustTunnel](https://github.com/TrustTunnel/TrustTunnel) — endpoint daemon
-- [TrustTunnelClient](https://github.com/TrustTunnel/TrustTunnelClient) — client library + CLI
-- [TrustTunnel-Keenetic](https://github.com/artemevsevev/TrustTunnel-Keenetic) — Keenetic router integration (community)
-
-## License
-
-BSD-2-Clause — see [LICENSE](LICENSE).
+Код интеграции OPNsense распространяется по BSD-2-Clause. Upstream-исходники
+TrustTunnel и TrustTunnelClient сохраняют свои лицензии Apache-2.0.

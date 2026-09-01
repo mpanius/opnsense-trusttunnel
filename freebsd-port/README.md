@@ -1,73 +1,64 @@
-# FreeBSD ports for TrustTunnel
+# FreeBSD-порты TrustTunnel
 
-This directory holds two FreeBSD ports that produce the binaries consumed by the
-`os-trusttunnel` plugin (which depends on them via `PLUGIN_DEPENDS=trusttunnel
-trusttunnel-client`):
+Overlay содержит два пакета для OPNsense 26.7 / FreeBSD 15.1 amd64:
 
-| Port | Upstream | Binary | Tag |
-| --- | --- | --- | --- |
-| `security/trusttunnel` | <https://github.com/TrustTunnel/TrustTunnel> | `trusttunnel_endpoint`, `trusttunnel_setup_wizard` | `v1.0.33` |
-| `security/trusttunnel-client` | <https://github.com/TrustTunnel/TrustTunnelClient> | `trusttunnel_client` | `v1.1.4` |
+| Порт | Upstream tag | Бинарники |
+| --- | --- | --- |
+| `security/trusttunnel` | `TrustTunnel v1.1.0` | `trusttunnel_endpoint`, `trusttunnel_setup_wizard` |
+| `security/trusttunnel-client` | `TrustTunnelClient v1.1.5-rc.6` | `trusttunnel_client` |
 
-`security/trusttunnel` is a pure Cargo workspace; `security/trusttunnel-client`
-drives the upstream CMake + Conan + Rust hybrid build via its top-level Makefile.
+Client tag является prerelease. Сборка и CLI smoke подтверждены, системный
+TUN на FreeBSD — нет.
 
-See each port's `UPSTREAM-NOTES.md` for the decisions, BoringSSL pinning, and
-patch list.
+## Создание builder
 
-## Build environment (FreeBSD 14 VM on Proxmox)
-
-Per `docs/plans/2026-05-23-opnsense-trusttunnel-plugin.md` Task 3 — Proxmox host
-`root@[internal-ip]`, FreeBSD 14.x VM with:
-
-- 4 vCPU, 8 GB RAM, 30 GB disk
-- Hostname `freebsd-build`
-- Bridged network with DHCP
-- Packages: `git cargo rust llvm pkgconf cmake ninja perl5 python311 py311-pip`
-
-### One-time prerequisites
+[`tools/provision-freebsd-builder.sh`](../tools/provision-freebsd-builder.sh)
+создаёт новую VM FreeBSD 15.1: 4 vCPU, 8 GiB RAM, диск 40 GiB. Скрипт
+проверяет SHA256 официального image, фиксирует commit ports tree и версии
+toolchain. Все адреса и ключи передаются аргументами; существующий VMID не
+изменяется.
 
 ```sh
-# Inside the FreeBSD VM, as a non-root build user (e.g. `builder`):
-git clone https://github.com/TrustTunnel/TrustTunnelClient.git ~/TrustTunnelClient
-cd ~/TrustTunnelClient
-# Export AdGuard Conan recipes into the local cache (required by trusttunnel-client port).
-python3 -m venv .venv && . .venv/bin/activate
-pip install conan
-./scripts/bootstrap_conan_deps.py
+tools/provision-freebsd-builder.sh \
+  --pve-host PVE_HOST --vmid VMID \
+  --address STATIC_IP/24 --gateway GATEWAY \
+  --bootstrap-address DHCP_IP \
+  --ssh-public-key /path/to/id_ed25519.pub
 ```
 
-This populates `~/.conan2/p/` with the AdGuard private recipes that the
-`security/trusttunnel-client` port consumes. Done once per VM lifetime.
+## Conan overlay клиента
 
-### Build the ports
+Checkout должен точно соответствовать `v1.1.5-rc.6`. Скрипт экспортирует
+зафиксированные NativeLibsCommon/DnsLibs recipes и накладывает проверяемые
+FreeBSD-патчи:
 
 ```sh
-git clone https://github.com/mpanius/opnsense-trusttunnel.git ~/opnsense-trusttunnel
-cd ~/opnsense-trusttunnel/freebsd-port/security/trusttunnel
-make makesum         # populates distinfo from the actual upstream tarball
-make package         # → work/pkg/trusttunnel-1.0.33.pkg
+git clone --branch v1.1.5-rc.6 --depth 1 \
+  https://github.com/TrustTunnel/TrustTunnelClient.git ~/TrustTunnelClient
+PATH="$HOME/.venv/bin:$PATH" \
+  tools/bootstrap-client-conan-freebsd.sh ~/TrustTunnelClient \
+  "$HOME/.venv/bin/conan"
+```
+
+## Сборка
+
+```sh
+export PORTSDIR="$HOME/ports"
+export PORTS_MK="-m /usr/share/mk -m $PORTSDIR/Mk"
+
+cd freebsd-port/security/trusttunnel
+make $PORTS_MK fetch checksum package
 
 cd ../trusttunnel-client
-make makesum
-make package         # → work/pkg/trusttunnel-client-1.1.4.pkg
+PATH="$HOME/.venv/bin:$PATH" make $PORTS_MK fetch checksum package
 ```
 
-### Build the plugin pkg
+Пакеты находятся в `work/pkg/`. До публикации установите каждый на чистую
+OPNsense 26.7 VM через `pkg add -f`, проверьте `pkg info`, ожидаемые файлы и
+безопасные `--version`/`--help`. Для клиента это только smoke, не E2E.
 
-```sh
-cd ~/opnsense-trusttunnel
-make package         # → work/pkg/os-trusttunnel-0.1.0.pkg
-```
+## Атрибуция
 
-## Local pkg-repo (release time — Task 12)
-
-Once all three pkgs build cleanly, they get signed (ed25519 key generated
-offline) and indexed via `pkg repo` for the self-hosted repo at
-`[publish-host]:/var/www/trusttunnel-repo/`.
-
-## Future: upstream into freebsd-ports tree
-
-These port directories are written in standard FreeBSD ports format so they can
-be PR'd into `github.com/freebsd/freebsd-ports` later. v1 ships from a private
-overlay only.
+Порты ссылаются на upstream Apache-2.0 и используют `LICENSE_FILE` из
+исходников. Обоснование pin/patch хранится в `UPSTREAM-NOTES.md` и
+`conan/patches/`.

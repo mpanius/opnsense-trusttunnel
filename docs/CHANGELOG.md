@@ -2,6 +2,9 @@
 
 All notable changes per release. Newest first.
 
+> Записи ниже описывают результаты соответствующей версии. Они не являются
+> доказательством совместимости текущих FreeBSD 15.1 packages.
+
 ## v2.0.0 (2026-05-25)
 
 ### Changed (breaking — plugin split)
@@ -89,7 +92,7 @@ HTTP 301 0.093116s
 
 Server side (--loglvl debug):
 ```
-[CLIENT=0] New TCP client: [internal-ip]:46656
+[CLIENT=0] New TCP client: <client-address>:46656
 [CLIENT=0] TLS13_CHACHA20_POLY1305_SHA256 ALPN h2
 [CLIENT=0/TUN=0/CONN=3] Received: CONNECT 1.1.1.1:80
 [CLIENT=0/TUN=0/CONN=3] Successfully connected to destination 1.1.1.1:80
@@ -164,13 +167,12 @@ Client tun0 bidirectional counters: Ipkts=4 Ibytes=606 / Opkts=6 Obytes=391.
 
 ### Verified end-to-end
 - Server: `trusttunnel_endpoint` listens on `*:443` TCP + UDP on
-  VM 103 ([internal-ip]), alice user authenticated, deeplink
+  an isolated test VM, alice user authenticated, deeplink
   exported successfully.
-- Client (FreeBSD): `trusttunnel_client` builds + runs on VM 200
-  ([internal-ip]), reaches `VPN_SS_CONNECTED`, opens `tun0`
+- Client (FreeBSD): `trusttunnel_client` builds + runs on a test VM,
+  reaches `VPN_SS_CONNECTED`, opens `tun0`
   POINTOPOINT interface with `inet 172.16.219.2 --> 172.16.219.1`,
-  TCP control session alive 211:24828 ↔ 186:443, pings endpoint
-  at 25 ms.
+  and keeps the TCP control session alive.
 
 ### Fixed during initial iteration
 - configd action invocation: `space-separated` not `dotted` event

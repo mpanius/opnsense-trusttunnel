@@ -1,90 +1,60 @@
-# Release runbook — os-trusttunnel v1
+# Выпуск пакетов
 
-> Audience: maintainer (mpanius). Step-by-step from `make package` to a
-> signed pkg sitting on a public-facing host.
+Этот runbook описывает подготовку артефактов для OPNsense 26.7 / FreeBSD 15.1.
+Публичный релиз запрещён, пока не пройдены все проверки ниже.
 
-## 0. Prereqs
+## 1. Собрать бинарные пакеты
 
-- FreeBSD 14 build VM up (per `freebsd-port/README.md`)
-- Both `security/trusttunnel` and `security/trusttunnel-client` ports
-  build cleanly (`make package` exits 0)
-- Plugin pkg builds cleanly (`make package` in repo root)
+На чистом builder выполните команды из
+[`../freebsd-port/README.md`](../freebsd-port/README.md). Сохраните версии,
+upstream tags/commit SHA, вывод `pkg info -F` и SHA256 каждого `.pkg`.
 
-## 1. Generate the pkg-signing keypair (one-time, OFFLINE)
+## 2. Собрать плагины
 
-⛔ NEVER on the FreeBSD build VM. Use your laptop or a dedicated
-air-gapped box. The private key must end up in 1Password.
-
-```sh
-# ed25519 (FreeBSD pkg supports ed25519 since pkg 1.18)
-openssl genpkey -algorithm ED25519 -out trusttunnel-repo.key
-openssl pkey    -in trusttunnel-repo.key -pubout -out repo-pub.cert
-```
-
-- Commit `repo-pub.cert` to this repo (the public key — safe to publish).
-- Store `trusttunnel-repo.key` in 1Password under
-  `opnsense-trusttunnel / pkg signing key`. NEVER commit it; `.gitignore`
-  excludes `*.key`.
-
-## 2. Sign and index the pkg directory
-
-On the FreeBSD build VM (or wherever you collect the three .pkg files):
+Подключите `net/os-trusttunnel` и `net/os-trusttunnel-client` к совместимому
+дереву `opnsense/plugins`; корень этого репозитория сам по себе не содержит
+`Mk/plugins.mk`.
 
 ```sh
-mkdir -p /tmp/trusttunnel-repo/FreeBSD:14:amd64/All
-cp ~/opnsense-trusttunnel/freebsd-port/security/trusttunnel/work/pkg/*.pkg          /tmp/trusttunnel-repo/FreeBSD:14:amd64/All/
-cp ~/opnsense-trusttunnel/freebsd-port/security/trusttunnel-client/work/pkg/*.pkg  /tmp/trusttunnel-repo/FreeBSD:14:amd64/All/
-cp ~/opnsense-trusttunnel/work/pkg/os-trusttunnel-*.pkg                              /tmp/trusttunnel-repo/FreeBSD:14:amd64/All/
-
-# Sign and index — pkg-repo asks for the private key path.
-pkg repo /tmp/trusttunnel-repo/FreeBSD:14:amd64 signing_command:'openssl dgst -sha256 -sign /path/to/trusttunnel-repo.key -binary'
+cd /path/to/opnsense/plugins/net/os-trusttunnel
+make package
+cd ../os-trusttunnel-client
+make package
 ```
 
-## 3. Publish to the chosen host
+## 3. Проверить артефакты
 
-**Primary host:** `[publish-host]` (`[internal-publish-ip]`) — LE cert for `packages.example.com`
-already present, nginx running. Fallback: `[fallback-host]` (NL).
+На чистой OPNsense 26.7 VM:
 
 ```sh
-# On [publish-host] (or [fallback-host] fallback):
-mkdir -p /var/www/trusttunnel-repo
-rsync -av /tmp/trusttunnel-repo/ root@[publish-host]:/var/www/trusttunnel-repo/
-
-# nginx snippet (drop into a server block on packages.example.com or a subpath):
-# location /pkgs/ { alias /var/www/trusttunnel-repo/; autoindex on; }
+pkg add -f ./trusttunnel-1.1.0.pkg
+pkg add -f ./trusttunnel-client-1.1.5.r.6.pkg
+trusttunnel_endpoint --version
+trusttunnel_client --version
 ```
 
-After publishing:
+После установки плагинов проверьте Web UI, генерацию конфигурации, права
+файлов, запуск служб и удаление пакетов. Клиентский релиз остаётся
+экспериментальным до реализации FreeBSD TUN и E2E-теста реального трафика.
+
+## 4. Проверить публичную готовность
+
+Перед tag/push обязательны:
 
 ```sh
-curl -sI https://packages.example.com/pkgs/FreeBSD:14:amd64/packagesite.txz | head -1
-# Expect: HTTP/2 200
+gitleaks dir . --redact
+gitleaks git . --redact
+git diff --check
+git status --short
 ```
 
-## 4. Substitute the URL in docs/install.md
+Дополнительно проверьте всю историю на приватные адреса/имена хостов, blobs
+более 50 MiB, generated files и лицензионную атрибуцию. Приватный ключ подписи
+никогда не хранится в Git или на builder.
 
-`docs/install.md` ships with `${REPO_URL}` placeholders. Before tagging
-the release, run:
+## 5. Опубликовать
 
-```sh
-sed -i '' 's,\${REPO_URL},https://packages.example.com/pkgs,g' docs/install.md
-# Verify no placeholder survives — release-blocker check (Task 12 DoD):
-! grep -q '\${REPO_URL}' docs/install.md && echo OK
-```
-
-## 5. Tag and push
-
-```sh
-git tag -s v0.1.0 -m "v0.1.0 — initial release"
-git push origin master --tags
-```
-
-## 6. Smoke-test on a fresh OPNsense CE 25.x VM
-
-Follow `docs/install.md` from scratch on a clean OPNsense VM:
-
-1. Drop `repo-pub.cert` into `/usr/local/etc/ssl/trusttunnel-repo.cert`
-2. Drop `trusttunnel.conf` (template in `docs/install.md`) into
-   `/usr/local/etc/pkg/repos/`
-3. `pkg update && pkg install -y os-trusttunnel`
-4. Open https://&lt;OPNsense&gt;/ui/trusttunnel/ — verify TS-001 passes
+Создавайте GitHub Release только из проверенного commit. Прикладывайте `.pkg`,
+файл `SHA256SUMS` и release notes с точными платформой, upstream SHA и
+известными ограничениями. Подписанный pkg-репозиторий документируется только
+после появления реального публичного ключа и доступного HTTPS endpoint.

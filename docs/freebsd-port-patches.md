@@ -1,4 +1,10 @@
-# FreeBSD Port Patches — TrustTunnel Client v1.1.4
+# FreeBSD Port Patches — TrustTunnel Client v1.1.4 (архив)
+
+> Этот документ сохраняет историю портирования v1.1.4 на FreeBSD 14.3.
+> Текущая сборка v1.1.5-rc.6 использует другой набор overlay patches из
+> `freebsd-port/security/trusttunnel-client/files/` и `freebsd-port/conan/`.
+> Описанные здесь TUN patches не входят в текущий пакет автоматически и не
+> подтверждают работоспособность FreeBSD TUN.
 
 Кумулятивный список всех patches, применённых для сборки и запуска
 `trusttunnel_client` (из репо TrustTunnel/TrustTunnelClient) на

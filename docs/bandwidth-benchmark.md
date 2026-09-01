@@ -1,8 +1,11 @@
-# Bandwidth Benchmark — v1.0.1
+# Bandwidth Benchmark — v1.0.1 (исторический)
 
-Test environment: 2 OPNsense 26.1.8_5 VMs on Proxmox [internal-ip]
-- Server: VM 103, [internal-ip], `trusttunnel_endpoint` :443
-- Client: VM 200, [internal-ip], `trusttunnel_client` + `tun0`
+> Эти результаты относятся только к прежней сборке v1.0.1 на OPNsense
+> 26.1.8_5. Они не подтверждают FreeBSD TUN в текущем client v1.1.5-rc.6.
+
+Test environment: 2 isolated OPNsense 26.1.8_5 VMs
+- Server: test VM, `trusttunnel_endpoint` :443
+- Client: test VM, `trusttunnel_client` + `tun0`
 - Both on `vmbr0` bridge (gigabit), no real WAN
 - Server cert: self-signed `vpn.test.local`, user `alice`
 
@@ -62,7 +65,7 @@ tun0  544174 Ipkts  646,985,706 Ibytes  544199 Opkts  28,303,784 Obytes
 After all tests:
 
 - `pgrep trusttunnel_client` → still running, same PID 63913
-- TCP control session still alive: `[internal-ip]:31876 ↔ [internal-ip]:443`
+- TCP control session remained alive between the two test VMs
 - No reconnects (single session ID throughout)
 - 0 interface errors, 0 dropped packets
 - `tun0` still UP,POINTOPOINT,RUNNING
@@ -104,6 +107,6 @@ For a v1 release with:
 - FreeBSD-ported client through ~30 cumulative patches
 - No kernel offloading, no DPDK, no AES-NI specific tuning
 
-**Sustained 100+ Mbit/s with zero errors over 30s** is shipping quality.
-For reference, commercial VPNs (NordVPN, ExpressVPN) achieve 100-300 Mbit/s
-on similar hardware over similar protocols.
+The historical build sustained 100+ Mbit/s with zero errors over 30 seconds.
+Repeat the benchmark on the current release before making performance or
+support claims.

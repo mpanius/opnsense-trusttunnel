@@ -106,6 +106,11 @@ request and the upstream replied + closed.
 
 ## Client (FreeBSD)
 
+> Раздел ниже относится к исторической v1.1.4 portation. В текущем upstream
+> v1.1.5-rc.6 `make_vpn_tunnel()` не создаёт FreeBSD TUN backend. Если CLI
+> запускается, но системный tunnel не появляется, это ожидаемое ограничение,
+> а не подтверждение корректности старых patches.
+
 ### **`trusttunnel_client` opens `tun0` and then exits**
 
 Symptom from the v1 dev cycle: process gone, but `tun0` interface
