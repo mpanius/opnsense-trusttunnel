@@ -145,8 +145,8 @@ $(function () {
         $('.selectpicker').selectpicker('refresh');
     });
     ajaxGet('/api/trusttunnelclient/client/get/', {}, function (data) {
-        if (data && data.trusttunnel && data.trusttunnel.client && data.trusttunnel.client.active_server) {
-            window.__tt_activeServer = data.trusttunnel.client.active_server;
+        if (data && data.trusttunnelclient && data.trusttunnelclient.client && data.trusttunnelclient.client.active_server) {
+            window.__tt_activeServer = data.trusttunnelclient.client.active_server;
         }
         $("#grid-servers").UIBootgrid({
             search: '/api/trusttunnelclient/client/searchServer/',

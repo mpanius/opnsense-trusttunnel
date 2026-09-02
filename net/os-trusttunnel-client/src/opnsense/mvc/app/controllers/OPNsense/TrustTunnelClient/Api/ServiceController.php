@@ -49,7 +49,7 @@ class ServiceController extends ApiControllerBase
         ];
     }
 
-    public function startAction($role = 'server')
+    public function startAction($role = 'client')
     {
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
@@ -57,7 +57,7 @@ class ServiceController extends ApiControllerBase
         return $this->dispatch($role, 'start');
     }
 
-    public function stopAction($role = 'server')
+    public function stopAction($role = 'client')
     {
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
@@ -65,7 +65,7 @@ class ServiceController extends ApiControllerBase
         return $this->dispatch($role, 'stop');
     }
 
-    public function restartAction($role = 'server')
+    public function restartAction($role = 'client')
     {
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
@@ -73,7 +73,7 @@ class ServiceController extends ApiControllerBase
         return $this->dispatch($role, 'restart');
     }
 
-    public function reconfigureAction($role = 'server')
+    public function reconfigureAction($role = 'client')
     {
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
@@ -84,7 +84,7 @@ class ServiceController extends ApiControllerBase
     /**
      * Status is a GET — no side effects, OK to be idempotent.
      */
-    public function statusAction($role = 'server')
+    public function statusAction($role = 'client')
     {
         try {
             $resolved = $this->resolveRole($role);

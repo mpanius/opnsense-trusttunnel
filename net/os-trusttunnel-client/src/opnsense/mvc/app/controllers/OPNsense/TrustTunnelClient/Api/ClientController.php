@@ -97,39 +97,42 @@ class ClientController extends ApiMutableModelControllerBase
         return ['status' => 'ok', 'active_server' => $uuid];
     }
 
-    /**
-     * Override of set() to add tun_interface clash detection (Claude
-     * must_fix #3 + plan Task 9 § Key Decisions). Calls parent first
-     * for model-layer validation + save, then runs a live `ifconfig -l`
-     * check against the saved tun_interface name and rejects if it
-     * clashes with a non-trusttunnel interface.
-     */
-    public function setAction()
+    protected function validateRuntimeInterfaces(): ?string
     {
-        $result = parent::setAction();
-        if (!is_array($result) || ($result['result'] ?? '') !== 'saved') {
-            return $result;
+        $client = $this->getModel()->client;
+        $tun = trim((string)$client->tun_interface);
+        $boundIf = trim((string)$client->bound_if);
+        $useExisting = (string)$client->use_existing === '1';
+        $interfaces = preg_split(
+            '/\s+/',
+            trim((string)@shell_exec('/sbin/ifconfig -l 2>/dev/null')),
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        );
+        $interfaces = is_array($interfaces) ? $interfaces : [];
+
+        if ($useExisting && $tun === '') {
+            return 'use_existing requires a non-empty tun_interface';
         }
-        $tun = (string)$this->getModel()->client->tun_interface;
-        if ($tun === '') {
-            return $result;
-        }
-        // tt[0-9]+ pattern reserved for this plugin. Anything else colliding
-        // with an existing interface is a config error.
-        if (!preg_match('/^tt[0-9]+$/', $tun)) {
-            $existing = trim((string)@shell_exec('/sbin/ifconfig -l 2>/dev/null'));
-            foreach (preg_split('/\s+/', $existing) as $iface) {
-                if ($iface === $tun) {
-                    $result['tun_interface_warning'] = sprintf(
-                        "tun_interface '%s' clashes with an existing live interface. " .
-                        "Apply will likely fail. Use the default 'tt0' or a unique 'tt<N>' name.",
-                        $tun
-                    );
-                    break;
-                }
+        if ($tun !== '') {
+            $exists = in_array($tun, $interfaces, true);
+            if ($useExisting && !$exists) {
+                return sprintf("tun_interface '%s' does not exist", $tun);
+            }
+            if (!$useExisting && $exists) {
+                return sprintf(
+                    "tun_interface '%s' already exists; enable use_existing or choose a free name",
+                    $tun
+                );
             }
         }
-        return $result;
+        if ($boundIf === '') {
+            return 'bound_if is required on FreeBSD/OPNsense';
+        }
+        if (!in_array($boundIf, $interfaces, true)) {
+            return sprintf("bound_if '%s' does not exist", $boundIf);
+        }
+        return null;
     }
 
     /**
@@ -140,9 +143,13 @@ class ClientController extends ApiMutableModelControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'error' => 'POST required'];
         }
+        $validationError = $this->validateRuntimeInterfaces();
+        if ($validationError !== null) {
+            return ['status' => 'failed', 'error' => $validationError];
+        }
         $backend = new Backend();
         $output = trim((string)$backend->configdRun('trusttunnelclient client reconfigure'));
-        $status = (strpos($output, 'OK') !== false || $output === '') ? 'ok' : 'failed';
+        $status = preg_match('/(?:^|\R)OK(?:\R|$)/', $output) === 1 ? 'ok' : 'failed';
         return ['status' => $status, 'output' => $output];
     }
 }

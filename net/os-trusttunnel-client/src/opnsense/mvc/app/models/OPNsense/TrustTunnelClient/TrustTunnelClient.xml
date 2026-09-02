@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/trusttunnelclient</mount>
     <description>TrustTunnel VPN client</description>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <items>
         <client>
             <enabled type="BooleanField">
@@ -9,18 +9,35 @@
             </enabled>
             <active_server type="UniqueIdField"/>
             <mode type="OptionField">
-                <default>selective</default>
+                <default>general</default>
                 <OptionValues>
                     <general>general</general>
                     <selective>selective</selective>
                 </OptionValues>
             </mode>
             <tun_interface type="TextField">
-                <default>tt0</default>
-                <Mask>/^[A-Za-z][A-Za-z0-9_]{0,14}$/</Mask>
-                <ValidationMessage>Interface name must be 1-15 chars, start with a letter; letters/digits/underscore only</ValidationMessage>
+                <default></default>
+                <Mask>/^(tun[0-9]+)?$/</Mask>
+                <ValidationMessage>FreeBSD interface name must be empty (automatic) or tun&lt;number&gt;</ValidationMessage>
             </tun_interface>
             <allowed_destinations type="CSVListField"/>
+            <excluded_destinations type="CSVListField"/>
+            <use_existing type="BooleanField">
+                <default>0</default>
+            </use_existing>
+            <mtu_size type="IntegerField">
+                <default>1350</default>
+                <MinimumValue>576</MinimumValue>
+                <MaximumValue>9000</MaximumValue>
+            </mtu_size>
+            <change_system_dns type="BooleanField">
+                <default>0</default>
+            </change_system_dns>
+            <bound_if type="TextField">
+                <default></default>
+                <Required>Y</Required>
+                <Mask>/^[A-Za-z][A-Za-z0-9_.-]{0,14}$/</Mask>
+            </bound_if>
             <servers>
                 <server type="ArrayField">
                     <name type="TextField">

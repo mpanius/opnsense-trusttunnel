@@ -26,6 +26,13 @@
         <help>Pick a cert from System &#8594; Trust &#8594; Certificates (issued by os-acme-client or self-signed).</help>
     </field>
     <field>
+        <id>trusttunnel.server.allowed_sni</id>
+        <label>Allowed custom SNI</label>
+        <type>text</type>
+        <hint>front.example.net, edge.example.org</hint>
+        <help>Comma-separated exact SNI aliases. Do not use &lt;label&gt;.&lt;main-host&gt;; that syntax is reserved for SNI authentication.</help>
+    </field>
+    <field>
         <id>trusttunnel.server.protocols</id>
         <label>Protocols</label>
         <type>select_multiple</type>

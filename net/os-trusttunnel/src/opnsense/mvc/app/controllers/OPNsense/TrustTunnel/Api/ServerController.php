@@ -251,7 +251,7 @@ class ServerController extends ApiMutableModelControllerBase
         }
         $backend = new Backend();
         $output = trim((string)$backend->configdRun('trusttunnel server reconfigure'));
-        $status = (strpos($output, 'OK') !== false || $output === '') ? 'ok' : 'failed';
+        $status = preg_match('/(?:^|\R)OK(?:\R|$)/', $output) === 1 ? 'ok' : 'failed';
         return ['status' => $status, 'output' => $output];
     }
 

@@ -27,7 +27,7 @@ load_rc_config $name
 pidfile=/var/run/${name}.pid
 command=/usr/sbin/daemon
 procname=/usr/local/sbin/trusttunnel_client
-command_args="-S -T trusttunnel-client -P ${pidfile} ${procname} \
+command_args="-S -T trusttunnel-client -p ${pidfile} ${procname} \
         -c ${trusttunnel_client_config}"
 
 required_files="${trusttunnel_client_config} ${procname}"

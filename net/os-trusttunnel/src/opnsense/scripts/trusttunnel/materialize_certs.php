@@ -25,6 +25,7 @@
  */
 
 require_once '/usr/local/etc/inc/config.inc';
+require_once __DIR__ . '/cert_helpers.php';
 
 const CERT_DIR  = '/usr/local/etc/trusttunnel/server/certs';
 const CERT_PATH = CERT_DIR . '/cert.pem';
@@ -116,9 +117,14 @@ try {
         fwrite(STDERR, "error: cert refid=$refid has empty crt or prv field\n");
         exit(1);
     }
-    $crt_pem = base64_decode($crt_b64, true);
+    try {
+        $crt_pem = build_certificate_chain($config, $cert, $refid);
+    } catch (UnexpectedValueException $e) {
+        fwrite(STDERR, "error: " . $e->getMessage() . "\n");
+        exit(1);
+    }
     $prv_pem = base64_decode($prv_b64, true);
-    if ($crt_pem === false || $prv_pem === false) {
+    if ($prv_pem === false) {
         fwrite(STDERR, "error: base64_decode failed for cert refid=$refid\n");
         exit(1);
     }

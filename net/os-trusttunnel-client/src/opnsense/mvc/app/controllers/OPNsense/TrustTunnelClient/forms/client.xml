@@ -1,27 +1,58 @@
 <form>
     <field>
-        <id>trusttunnel.client.enabled</id>
+        <id>trusttunnelclient.client.enabled</id>
         <label>Enable Client</label>
         <type>checkbox</type>
         <help>Run the trusttunnel_client daemon on this OPNsense (requires an Active server).</help>
     </field>
     <field>
-        <id>trusttunnel.client.mode</id>
+        <id>trusttunnelclient.client.mode</id>
         <label>Mode</label>
         <type>dropdown</type>
-        <help>general = route everything through the tunnel. selective = only allowed_destinations.</help>
+        <help>Traffic policy: general tunnels all destinations except exclusions; selective tunnels only allowed destinations.</help>
     </field>
     <field>
-        <id>trusttunnel.client.tun_interface</id>
+        <id>trusttunnelclient.client.tun_interface</id>
         <label>TUN interface name</label>
         <type>text</type>
-        <hint>tt0</hint>
-        <help>Letters/digits/underscore, 1–15 chars, must start with a letter. tt[0-9]+ pattern is reserved for this plugin.</help>
+        <hint>empty = automatic, or tun0</hint>
+        <help>Leave empty to allocate the next FreeBSD tun device, or use tun&lt;number&gt;. The plugin owns and removes devices it creates.</help>
     </field>
     <field>
-        <id>trusttunnel.client.allowed_destinations</id>
+        <id>trusttunnelclient.client.allowed_destinations</id>
         <label>Allowed destinations</label>
         <type>text</type>
-        <help>Comma-separated CIDRs to route through the tunnel in selective mode (e.g. 10.40.0.0/24).</help>
+        <help>Managed OS routes in both modes (e.g. 198.51.100.0/24); in selective mode this list also selects tunneled destinations. Leave empty for external route management.</help>
+    </field>
+    <field>
+        <id>trusttunnelclient.client.excluded_destinations</id>
+        <label>Excluded routes</label>
+        <type>text</type>
+        <help>Comma-separated CIDRs that must not be installed on the TUN interface.</help>
+    </field>
+    <field>
+        <id>trusttunnelclient.client.use_existing</id>
+        <label>Use existing TUN device</label>
+        <type>checkbox</type>
+        <help>Attach to tun_interface instead of creating it. Leave disabled for normal OPNsense operation.</help>
+    </field>
+    <field>
+        <id>trusttunnelclient.client.mtu_size</id>
+        <label>TUN MTU</label>
+        <type>text</type>
+        <help>FreeBSD tunnel MTU; 1350 is the upstream default.</help>
+    </field>
+    <field>
+        <id>trusttunnelclient.client.change_system_dns</id>
+        <label>Change system DNS</label>
+        <type>checkbox</type>
+        <help>Unsupported on OPNsense. Keep disabled and manage DNS through OPNsense.</help>
+    </field>
+    <field>
+        <id>trusttunnelclient.client.bound_if</id>
+        <label>Outbound interface</label>
+        <type>text</type>
+        <hint>vtnet0</hint>
+        <help>Required physical interface used for the endpoint connection; verify the per-node WAN name before Apply.</help>
     </field>
 </form>

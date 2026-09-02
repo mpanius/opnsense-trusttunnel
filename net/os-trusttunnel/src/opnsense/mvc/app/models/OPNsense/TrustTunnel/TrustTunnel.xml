@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/trusttunnel</mount>
     <description>TrustTunnel VPN endpoint (server)</description>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <items>
         <general>
             <enabled type="BooleanField">
@@ -21,6 +21,7 @@
                 <default>vpn.example.com</default>
                 <Required>Y</Required>
             </hostname>
+            <allowed_sni type="CSVListField"/>
             <allow_private_network_connections type="BooleanField">
                 <default>1</default>
             </allow_private_network_connections>
