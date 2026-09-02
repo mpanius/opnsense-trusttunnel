@@ -1,5 +1,6 @@
 PORTNAME=	trusttunnel-client
 DISTVERSION=	1.1.5-rc.6
+PORTREVISION=	1
 CATEGORIES=	security net
 
 MAINTAINER=	mpanius@gmail.com
