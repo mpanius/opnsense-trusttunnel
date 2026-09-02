@@ -19,8 +19,9 @@ managed routes. IPv6 и
 Минимальная проверка backend на FreeBSD запускается от root:
 
 ```sh
+BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
 sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
-  /usr/local/sbin/trusttunnel_client
+  /usr/local/sbin/trusttunnel_client "$BOUND_IF"
 ```
 
 Smoke проверяет create/cleanup, MTU 1350, отказ занять existing TUN без

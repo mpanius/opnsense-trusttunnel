@@ -117,7 +117,9 @@ Upstream `v1.1.5-rc.6` не содержит FreeBSD TUN backend, но теку�
 Команда требует root:
 
 ```sh
-sh tests/freebsd_client_tun_smoke.sh /usr/local/sbin/trusttunnel_client
+BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
+sh tests/freebsd_client_tun_smoke.sh \
+  /usr/local/sbin/trusttunnel_client "$BOUND_IF"
 ```
 
 Ожидаются четыре сообщения `PASS`: create с `UP,POINTOPOINT` и MTU 1350,
@@ -142,10 +144,17 @@ ifconfig -l | tr ' ' '\n' | grep '^tun[0-9][0-9]*$'
 service trusttunnel_client onestatus
 ```
 
+Status считается успешным только когда живы и `daemon(8)` supervisor, и его
+непосредственный `trusttunnel_client` child. Во время пятисекундной задержки
+перезапуска команда возвращает non-zero; при crash-loop результат может
+чередоваться, поэтому единичный зелёный status не доказывает устойчивость или
+работающий data plane. Живой supervisor сам по себе также недостаточен.
+
 ### **Маршрут есть, но трафик не проходит**
 
 Текущий backend настраивает IPv4 POINTOPOINT, маршруты из `included_routes` и
-MTU из конфигурации (рекомендуемое значение — 1350). IPv6 пока недоступен.
+MTU из конфигурации (default модели plugin 1350; снижайте только при провале
+PMTUD). IPv6 пока недоступен.
 Проверьте имя, адреса, MTU, маршрут и счётчики:
 
 ```sh
@@ -175,6 +184,69 @@ FreeBSD backend намеренно не заменяет системный DNS.
 `change_system_dns = false` и управляйте DNS через OPNsense. Плагин отклоняет
 конфигурацию с включённой заменой DNS; не обходите эту проверку прямым запуском
 клиента.
+
+### **General log заполнен traceback от `onestatus`**
+
+`rc.d onestatus` возвращает exit `1`, если daemon штатно остановлен. В
+configd action `[server.status]` или `[client.status]` должны одновременно
+присутствовать `type: script_output` и `errors:no`; это стандартный контракт
+OPNsense для status actions. После обновления plugin package проверьте action и
+перезапустите только configd, если package hook ещё не сделал этого:
+
+```sh
+grep -A5 '^\[server.status\]' \
+  /usr/local/opnsense/service/conf/actions.d/actions_trusttunnel.conf
+grep -A5 '^\[client.status\]' \
+  /usr/local/opnsense/service/conf/actions.d/actions_trusttunnelclient.conf
+service configd restart
+```
+
+`errors:no` относится только к диагностическому status: ошибки start,
+reconfigure и самого TrustTunnel по-прежнему должны останавливать action.
+
+### **Восемь `UPSTREAM_MUX` ошибок появляются одновременно**
+
+Сначала подтвердите transport по rendered config и сокетам:
+
+```sh
+grep upstream_protocol \
+  /usr/local/etc/trusttunnel/client/trusttunnel_client.toml
+sockstat -46c | grep trusttunnel
+```
+
+При HTTP/2 Client держит пул из восьми TCP upstream sockets. Рестарт Endpoint
+закрывает весь пул одновременно и даёт группу `TCP socket error` / `Resource
+temporarily unavailable`; Client должен переподключиться без смены своего PID.
+UDP listener Endpoint сам по себе не доказывает HTTP/3. Если такие группы идут
+без рестарта Endpoint или число FD растёт, снимайте динамику
+`procstat -f <client-pid>` и считайте это отдельным FD/reconnect инцидентом.
+
+Client rc.d supervisor перезапустит аварийно завершившийся child через 5 секунд,
+но это только восстановление сервиса, а не исправление возможной upstream-утечки.
+
+### **Sustained transfer даёт `tun<N> Drop`, хотя TCP не повреждён**
+
+Снимайте до/после не только application hash, но и интерфейсные счётчики:
+
+```sh
+netstat -I tun0 -bdn
+netstat -m
+procstat -f "$(pgrep -o trusttunnel_client)" | wc -l
+```
+
+Колонка `Drop` у `tun<N>` — потери output queue; нулевые `Ierrs/Oerrs` и
+совпавший SHA256 их не отменяют. `netstat -m` отделяет переполнение очереди TUN
+от нехватки mbuf. Не маскируйте проблему увеличением FD limit: сначала уменьшите
+burst/rate теста и убедитесь, что число FD возвращается к baseline. FreeBSD
+создаёт TUN с текущим `net.link.ifqmaxlen`; этот параметр является boot-time
+read-only tunable. Его изменение требует отдельного maintenance preflight,
+штатного reboot и пересоздания TUN, поэтому не применяйте его во время live
+transfer.
+
+Full-duplex harness не должен делать `shutdown(SHUT_WR)`, пока встречное
+направление ещё передаёт данные: текущий data plane закрывает весь flow после
+half-close. Дождитесь точного количества байт в обе стороны, проверьте оба
+SHA256 и только затем закрывайте socket.
 
 ### Архив: портирование v1.1.4
 

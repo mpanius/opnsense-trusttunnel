@@ -34,6 +34,15 @@ for package in png-1.6.58.pkg libqrencode-4.1.1.pkg \
   trusttunnel-client-1.1.5.r.6.pkg os-trusttunnel-client-2.1.0.pkg; do
   pkg info -F "./${package}"
 done
+
+for package in os-trusttunnel-2.1.0.pkg \
+  os-trusttunnel-client-2.1.0.pkg; do
+  manifest=$(pkg info -l -F "./${package}") || exit 1
+  if printf '%s\n' "$manifest" | \
+    grep -E '/\._|__MACOSX|__pycache__|\.pyc$'; then
+    exit 1
+  fi
+done
 ```
 
 Устанавливайте зависимости, бинарник и соответствующий plugin package именно
@@ -58,7 +67,8 @@ configctl webgui restart
 
 - `tun_interface`: пустая строка для нового интерфейса или свободный `tun<N>`;
 - `use_existing`: требует явно заданный существующий `tun<N>`;
-- `mtu_size`: 576–9000, рекомендуемое значение по умолчанию 1350;
+- `mtu_size`: 576–9000, default модели plugin `1350`; снижайте его только при
+  воспроизводимом провале end-to-end PMTUD;
 - `bound_if`: обязательный физический исходящий интерфейс именно этого узла;
 - `change_system_dns`: только `false`; DNS управляется OPNsense;
 - `allowed_destinations`/`excluded_destinations`: только IPv4-сети.
@@ -99,10 +109,28 @@ uninstall способом удаления сертификата или firewa
    восстановиться. Автоматизированная основа проверки:
 
    ```sh
+   BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
    python3 -m unittest discover -s tests -v
    sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
-     /usr/local/sbin/trusttunnel_client
+     /usr/local/sbin/trusttunnel_client "$BOUND_IF"
    ```
+
+После включения сервиса проверьте boot lifecycle на тестовой OPNsense:
+штатный reboot должен восстановить Endpoint/Client, Client supervisor и его
+child должны иметь разные PID, а созданный `tun<N>` и настроенные managed routes —
+появиться без ручного Apply. Для Client отдельно выполните
+supervision smoke на тестовой OPNsense с установленным plugin: завершение child
+не должно менять PID supervisor и должно создать новый child через 5 секунд.
+
+```sh
+sh /path/to/opnsense-trusttunnel/tests/freebsd_client_supervision_smoke.sh \
+  /usr/local/etc/rc.d/trusttunnel_client \
+  /usr/local/sbin/trusttunnel_client
+```
+
+Этот smoke использует детерминированный worker вместо сетевого запуска Client:
+он проверяет supervisor PID, красный status без child, повторный запуск child и
+чистый stop. Реальный бинарник и TUN отдельно проверяет предыдущий TUN smoke.
 
 Package lifecycle Endpoint проверяйте только на изолированной OPNsense VM.
 Smoke удаляет и повторно устанавливает plugin, сравнивает полный SHA256

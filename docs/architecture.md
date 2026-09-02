@@ -57,7 +57,7 @@ deeplink preview + explicit confirmation
 Renderer переводит модель OPNsense в контракт `v1.1.5-rc.6`: top-level
 `vpn_mode`/`exclusions`, секции `[endpoint]` и `[listener.tun]`. Для FreeBSD
 поддерживается только IPv4; `device_name` пуст или соответствует `tun<N>`,
-MTU находится в диапазоне 576–9000 (по умолчанию 1350), а `bound_if` обязателен
+MTU находится в диапазоне 576–9000 (default модели plugin 1350), а `bound_if` обязателен
 и задаётся отдельно для каждого узла как его физический исходящий интерфейс.
 Изменение системного DNS запрещено:
 `change_system_dns = false`. При `use_existing = false` имя должно быть пустым
@@ -65,6 +65,15 @@ MTU находится в диапазоне 576–9000 (по умолчанию
 удаляет его вместе со своими маршрутами при stop. При `true` backend сохраняет
 адреса, MTU и жизненный цикл существующего TUN, переключает packet-header mode
 через `TUNSIFHEAD=0` и снимает при stop только добавленные managed routes.
+
+Client запускается через `daemon -r -R 5`: rc.d отслеживает supervisor и
+отдельный child pidfile, поэтому аварийное завершение бинарника приводит к
+перезапуску через 5 секунд. Start syshook получает `enabled` через `pluginctl`,
+затем вызывает штатный `configctl reconfigure`; stop syshook безусловно вызывает
+`configctl stop`. Прямого чтения или записи `/conf/config.xml` в boot path нет.
+Status-actions используют стандартный для
+OPNsense `errors:no`, поскольку `rc.d onestatus` штатно возвращает exit `1` для
+остановленного сервиса.
 
 ## Текущая граница поддержки
 
@@ -75,9 +84,9 @@ Upstream `TrustTunnelClient v1.1.5-rc.6` не создаёт FreeBSD TUN; backen
 1350, TCP HTTP 301, UDP DNS A, рост счётчиков с 0/0 до 929/690 байт без
 ошибок, удаление `tun0` и восстановление маршрута через `vtnet0` после stop.
 
-Endpoint-side capture подтвердил certificate identity `api.www1.ru` и отличный
-от него SNI `www1.ru`; Let’s Encrypt certificate с SAN `*.www1.ru` и
-`www1.ru` прошёл проверку, через ту же сессию прошли TCP HTTP 301 и UDP DNS.
+Endpoint-side capture подтвердил certificate identity и отличный от него
+разрешённый SNI; публично доверенный сертификат с подходящими SAN прошёл
+проверку, через ту же сессию прошли TCP HTTP 301 и UDP DNS.
 Alias не должен иметь вид `<label>.<main-host>`: upstream резервирует этот
 формат под SNI-аутентификацию `<credentials>.<main-host>`.
 

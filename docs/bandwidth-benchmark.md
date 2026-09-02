@@ -7,7 +7,7 @@ Test environment: 2 isolated OPNsense 26.1.8_5 VMs
 - Server: test VM, `trusttunnel_endpoint` :443
 - Client: test VM, `trusttunnel_client` + `tun0`
 - Both on `vmbr0` bridge (gigabit), no real WAN
-- Server cert: self-signed `vpn.test.local`, user `alice`
+- Server cert: self-signed `vpn.example.test`, user `alice`
 
 Test date: 2026-05-23 08:25.
 

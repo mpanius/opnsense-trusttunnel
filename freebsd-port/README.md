@@ -101,9 +101,9 @@ Patch
 цикл чужого интерфейса, переключает packet-header mode через `TUNSIFHEAD=0`,
 но снимает добавленные им managed routes.
 
-Для OPNsense используйте пустое `device_name` или имя вида `tun<N>`, типовой
-`mtu_size = 1350`; обязательный `bound_if` должен совпадать с реальным
-физическим исходящим интерфейсом этого узла. IPv6 backend пока
+Для OPNsense используйте пустое `device_name` или имя вида `tun<N>`; типовое
+значение модели plugin — `mtu_size = 1350`. Обязательный `bound_if` должен
+совпадать с реальным физическим исходящим интерфейсом этого узла. IPv6 backend пока
 недоступен. `change_system_dns` должен оставаться `false`: DNS настраивает
 OPNsense, а не клиентский процесс.
 
@@ -125,8 +125,9 @@ OPNsense 26.7 VM через `pkg add`, проверьте `pkg info`, ожида
 безопасные `--version`/`--help`. Затем из root-shell запустите smoke backend:
 
 ```sh
+BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
 sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
-  /usr/local/sbin/trusttunnel_client
+  /usr/local/sbin/trusttunnel_client "$BOUND_IF"
 ```
 
 Smoke проверяет создание `tun<N>` с POINTOPOINT и MTU 1350, удаление

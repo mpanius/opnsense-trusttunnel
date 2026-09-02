@@ -77,7 +77,11 @@ pkg add ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
 
 ```sh
 pkg add ./trusttunnel-client-1.1.5.r.6.pkg ./os-trusttunnel-client-2.1.0.pkg
+BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
 sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
+  /usr/local/sbin/trusttunnel_client "$BOUND_IF"
+sh /path/to/opnsense-trusttunnel/tests/freebsd_client_supervision_smoke.sh \
+  /usr/local/etc/rc.d/trusttunnel_client \
   /usr/local/sbin/trusttunnel_client
 ```
 
@@ -92,9 +96,9 @@ TLS/SNI и аутентификация, маршрут через TUN, TCP и U
 `929/690` bytes без interface errors, а после штатного stop исчезли созданные
 TUN-интерфейс и маршрут. Это evidence тестового стенда, а не подтверждение
 production deployment, HA, длительной нагрузки или production-маршрутизации.
-Отличающийся `custom_sni=www1.ru` подтверждён endpoint-side capture при
-certificate identity `api.www1.ru`; Let’s Encrypt certificate с SAN
-`*.www1.ru`/`www1.ru` прошёл проверку, через ту же сессию прошли TCP и UDP DNS.
+Отличающийся от certificate identity разрешённый `custom_sni` подтверждён
+endpoint-side capture; публично доверенный сертификат с подходящими SAN прошёл
+проверку, через ту же сессию прошли TCP и UDP DNS.
 Не используйте alias вида `<label>.<main-host>`: endpoint трактует его как
 SNI-аутентификацию `<credentials>.<main-host>`.
 
@@ -126,6 +130,23 @@ git rev-list --objects --all | \
 Корневой `LICENSE` должен покрывать интеграцию, а оба overlay-порта — указывать
 лицензию и `LICENSE_FILE` соответствующего upstream. Приватные ключи, secrets,
 внутренние адреса, caches и собранные `.pkg` в Git не добавляются.
+
+При переносе overlay с macOS отключайте resource forks (`COPYFILE_DISABLE=1`)
+и перед публикацией проверяйте каждый plugin manifest:
+
+```sh
+for package in os-trusttunnel-2.1.0.pkg \
+  os-trusttunnel-client-2.1.0.pkg; do
+  manifest=$(pkg info -l -F "${package}") || exit 1
+  if printf '%s\n' "$manifest" | \
+    grep -E '/\._|__MACOSX|__pycache__|\.pyc$'; then
+    exit 1
+  fi
+done
+```
+
+Наличие AppleDouble `._*` в package считается release blocker даже если
+`pkg add -f` способен проигнорировать конфликтующие записи.
 
 ## 5. Подготовить публикацию
 

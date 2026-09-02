@@ -32,7 +32,9 @@ python3 -m unittest discover -s tests -v
 fd -e php . net -x php -l
 fd -e py . net -x python3 -m py_compile
 fd -e xml . net -x xmllint --noout
-sh tests/freebsd_client_tun_smoke.sh  # на тестовой FreeBSD/OPNsense VM
+BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
+sh tests/freebsd_client_tun_smoke.sh \
+  /usr/local/sbin/trusttunnel_client "$BOUND_IF"  # на тестовой VM
 ```
 
 ## Стиль и именование

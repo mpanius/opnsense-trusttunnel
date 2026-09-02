@@ -39,6 +39,18 @@ All notable changes per release. Newest first.
   `Config::save()`. Сертификаты и WAN rules принадлежат штатным API
   `/api/trust/cert/*` и `/api/firewall/filter/*`; package install/uninstall
   изменяет только plugin model и производные runtime-файлы.
+- Start/stop syshooks восстанавливают включённые Endpoint и Client после boot
+  через штатные `pluginctl`/`configctl`; Client запускается под `daemon -r`
+  и автоматически создаёт новый child после аварийного завершения.
+- Status actions используют `script_output` с `errors:no`, поэтому штатно
+  остановленный сервис больше не заполняет General log traceback от
+  `rc.d onestatus`.
+- Client status требует одновременно живые supervisor и непосредственный
+  `trusttunnel_client` child: окно restart-delay больше не отображается как
+  работающий Client.
+- Client UI строит таблицу серверов независимо от вспомогательного запроса
+  активного UUID; UUID хранится без numeric coercion. Default модели plugin MTU
+  остаётся `1350`, снижение требуется только при воспроизводимом провале PMTUD.
 
 ### Проверено
 
@@ -46,9 +58,9 @@ All notable changes per release. Newest first.
   verification и negative identity check, `VPN_SS_CONNECTED`, маршрут через
   `tun0` с MTU 1350, HTTP 301, UDP DNS, рост счётчиков `0/0 -> 929/690` без
   interface errors и удаление TUN/маршрута после остановки клиента.
-- Endpoint-side capture подтвердил certificate identity `api.www1.ru` и
-  отличный `custom_sni=www1.ru`; Let’s Encrypt certificate с SAN
-  `*.www1.ru`/`www1.ru`, TCP и UDP DNS прошли через одну сессию. Alias не
+- Endpoint-side capture подтвердил certificate identity и отличный от него
+  разрешённый `custom_sni`; публично доверенный сертификат с подходящими SAN,
+  TCP и UDP DNS прошли через одну сессию. Alias не
   являлся поддоменом main hostname, поскольку этот формат зарезервирован
   upstream под SNI-аутентификацию.
 - Этот результат подтверждает только тестовый стенд. Production deployment,
