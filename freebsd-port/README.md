@@ -143,6 +143,27 @@ FreeBSD ABI 1501000, подтвердил маркеры `VPN_SS_CONNECTED` и �
 Это доказательство локальной совместимости сборки, но не production
 validation.
 
+## Восстановление HTTP/2 upstream pool
+
+Upstream `v1.1.5-rc.6` не сообщает родительскому Client об ошибке health-check,
+если в multiplexer нет ни одной установленной сессии, но остались соединения в
+состоянии открытия. Под нагрузкой это может бесконечно пополнять нерабочий пул
+без повторного выбора endpoint. Patches
+`patch-core_src_upstream__multiplexer.cpp` и
+`patch-core_test_test__upstream__multiplexer.cpp` превращают это состояние в
+`SERVER_EVENT_HEALTH_CHECK_ERROR` и фиксируют контракт регрессионным тестом.
+Восстановление выполняет существующая state machine Client; таймауты, размер
+пула и transport не изменяются.
+
+После сборки запустите полный upstream multiplexer suite, а не только новый
+тест:
+
+```sh
+cd work/TrustTunnelClient-1.1.5-rc.6/build
+cmake --build . --target test_upstream_multiplexer
+./core/test_upstream_multiplexer
+```
+
 ## Атрибуция
 
 Порты ссылаются на upstream Apache-2.0 и используют `LICENSE_FILE` из

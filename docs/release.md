@@ -18,7 +18,7 @@ cd ../os-trusttunnel-client && make package
 Релиз `v2.1.0` должен содержать ровно четыре `.pkg`-артефакта:
 
 - `trusttunnel-1.1.0.pkg`;
-- `trusttunnel-client-1.1.5.r.6.pkg`;
+- `trusttunnel-client-1.1.5.r.6_1.pkg`;
 - `os-trusttunnel-2.1.0.pkg`;
 - `os-trusttunnel-client-2.1.0.pkg`.
 
@@ -33,7 +33,7 @@ Endpoint plugin зависит от `libqrencode`; зависимость дол
 : > SHA256SUMS
 for asset in \
   trusttunnel-1.1.0.pkg \
-  trusttunnel-client-1.1.5.r.6.pkg \
+  trusttunnel-client-1.1.5.r.6_1.pkg \
   os-trusttunnel-2.1.0.pkg \
   os-trusttunnel-client-2.1.0.pkg
 do
@@ -76,7 +76,7 @@ pkg add ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
 На отдельной client VM установите client и проверьте lifecycle TUN:
 
 ```sh
-pkg add ./trusttunnel-client-1.1.5.r.6.pkg ./os-trusttunnel-client-2.1.0.pkg
+pkg add ./trusttunnel-client-1.1.5.r.6_1.pkg ./os-trusttunnel-client-2.1.0.pkg
 BOUND_IF=vtnet0  # замените на фактический исходящий интерфейс узла
 sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
   /usr/local/sbin/trusttunnel_client "$BOUND_IF"

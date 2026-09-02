@@ -216,10 +216,23 @@ sockstat -46c | grep trusttunnel
 
 При HTTP/2 Client держит пул из восьми TCP upstream sockets. Рестарт Endpoint
 закрывает весь пул одновременно и даёт группу `TCP socket error` / `Resource
-temporarily unavailable`; Client должен переподключиться без смены своего PID.
-UDP listener Endpoint сам по себе не доказывает HTTP/3. Если такие группы идут
-без рестарта Endpoint или число FD растёт, снимайте динамику
-`procstat -f <client-pid>` и считайте это отдельным FD/reconnect инцидентом.
+temporarily unavailable`. UDP listener Endpoint сам по себе не доказывает
+HTTP/3.
+
+Сборка без recovery patch может застрять, если закрытые сессии успели получить
+replacement в состоянии `OPENING`: пул не пуст, но использовать нечего, а
+health-check не инициирует повторный выбор endpoint. В текущем overlay это
+состояние поднимает `SERVER_EVENT_HEALTH_CHECK_ERROR`; нормальная
+диагностика содержит `Health check error: There are no open upstream sessions
+(1)`, а ожидаемая успешная последовательность — `VPN_SS_WAITING_RECOVERY`,
+`VPN_SS_RECOVERING`, `VPN_SS_CONNECTED` без смены supervisor/child PID.
+Отсутствие `CONNECTED` и возврата прикладного трафика считается отказом, даже
+если процесс жив.
+
+Если группы ошибок идут без изменения Endpoint или число FD растёт, снимайте
+динамику `procstat -f <client-pid>` и считайте это отдельным FD/reconnect
+инцидентом. Проверяйте именно реальный TCP/UDP поток через `tun<N>`: одна строка
+status не доказывает восстановление data plane.
 
 Client rc.d supervisor перезапустит аварийно завершившийся child через 5 секунд,
 но это только восстановление сервиса, а не исправление возможной upstream-утечки.

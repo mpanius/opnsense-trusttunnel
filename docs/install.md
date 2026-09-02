@@ -10,7 +10,7 @@
 - root-доступ к консоли или SSH;
 - endpoint: `png-1.6.58.pkg`, `libqrencode-4.1.1.pkg`,
   `trusttunnel-1.1.0.pkg`, `os-trusttunnel-2.1.0.pkg`;
-- client: `trusttunnel-client-1.1.5.r.6.pkg`,
+- client: `trusttunnel-client-1.1.5.r.6_1.pkg`,
   `os-trusttunnel-client-2.1.0.pkg`;
 - резервная копия конфигурации тестового firewall.
 
@@ -27,11 +27,11 @@ OPNsense-плагины собираются в штатном дереве `opn
 ```sh
 sha256 ./png-1.6.58.pkg ./libqrencode-4.1.1.pkg \
   ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
-sha256 ./trusttunnel-client-1.1.5.r.6.pkg \
+sha256 ./trusttunnel-client-1.1.5.r.6_1.pkg \
   ./os-trusttunnel-client-2.1.0.pkg
 for package in png-1.6.58.pkg libqrencode-4.1.1.pkg \
   trusttunnel-1.1.0.pkg os-trusttunnel-2.1.0.pkg \
-  trusttunnel-client-1.1.5.r.6.pkg os-trusttunnel-client-2.1.0.pkg; do
+  trusttunnel-client-1.1.5.r.6_1.pkg os-trusttunnel-client-2.1.0.pkg; do
   pkg info -F "./${package}"
 done
 
@@ -54,7 +54,7 @@ pkg add ./png-1.6.58.pkg ./libqrencode-4.1.1.pkg
 pkg add ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
 
 # либо client
-pkg add ./trusttunnel-client-1.1.5.r.6.pkg \
+pkg add ./trusttunnel-client-1.1.5.r.6_1.pkg \
   ./os-trusttunnel-client-2.1.0.pkg
 
 configctl webgui restart

@@ -51,9 +51,19 @@ All notable changes per release. Newest first.
 - Client UI строит таблицу серверов независимо от вспомогательного запроса
   активного UUID; UUID хранится без numeric coercion. Default модели plugin MTU
   остаётся `1350`, снижение требуется только при воспроизводимом провале PMTUD.
+- FreeBSD Client port исправляет зависание HTTP/2 multiplexer, когда все
+  установленные upstream-сессии исчезли, а в пуле остались только открывающиеся
+  replacement-сессии: health-check теперь запускает штатный recovery, а
+  reping/reselection остаются политикой state machine; регрессионный тест
+  покрывает этот переход.
+- Binary port получил `PORTREVISION=1`, чтобы package manager отличал
+  исправленный `trusttunnel-client-1.1.5.r.6_1` от прежней локальной сборки.
 
 ### Проверено
 
+- Новый `HealthCheckFailsWithOnlyOpeningUpstreams` воспроизводит отсутствие
+  открытых сессий при непустом пуле; после исправления полный target
+  `test_upstream_multiplexer` прошёл `12/12` на FreeBSD 15.1 builder.
 - Локальный E2E на OPNsense `26.7.3_8`, FreeBSD ABI `1501000`: TLS certificate
   verification и negative identity check, `VPN_SS_CONNECTED`, маршрут через
   `tun0` с MTU 1350, HTTP 301, UDP DNS, рост счётчиков `0/0 -> 929/690` без

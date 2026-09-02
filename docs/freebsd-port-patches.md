@@ -32,6 +32,22 @@ attach-mode и attach-mode route cleanup, но не
 `1.1.1.1 -> tun0`, TCP HTTP 301, UDP DNS, двусторонний рост счётчиков без
 ошибок и cleanup. Production validation этим не заменяется.
 
+### Восстановление пула HTTP/2
+
+`patch-core_src_upstream__multiplexer.cpp` закрывает отдельный upstream-дефект:
+`do_health_check()` раньше возвращался без event, когда установленных сессий
+уже нет, но multiplexer содержит только открывающиеся replacement-сессии. Пул
+оставался непустым и не поднимал `SERVER_EVENT_SESSION_CLOSED`, поэтому Client
+мог сохранять состояние connected и бесконечно заменять нерабочие upstream.
+
+Patch поднимает `SERVER_EVENT_HEALTH_CHECK_ERROR` с сообщением `There are no
+open upstream sessions`. Существующая Client state machine после этого входит
+в recovery; повторный ping/reselection выполняется по её штатным правилам.
+Связанный
+`patch-core_test_test__upstream__multiplexer.cpp` создаёт ровно это состояние и
+проверяет event; полный `test_upstream_multiplexer` обязан оставаться зелёным.
+Transport, pool size и значения timeout не меняются.
+
 ## Архив: v1.1.4 / FreeBSD 14.3
 
 > Этот документ сохраняет историю портирования v1.1.4 на FreeBSD 14.3.

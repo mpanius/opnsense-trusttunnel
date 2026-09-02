@@ -50,6 +50,27 @@ IPv6 недоступен. Системный DNS должен
 DNS, двусторонние счётчики без ошибок и cleanup. Это не подтверждает
 production deployment.
 
+## HTTP/2 multiplexer recovery
+
+В upstream `UpstreamMultiplexer::do_health_check()` состояние без
+`US_SESSION_OPENED` только журналируется. Если закрытые сессии уже заменены на
+`US_OPENING_SESSION`, пул остаётся непустым, `SERVER_EVENT_SESSION_CLOSED` не
+возникает и Client не переходит к повторному выбору endpoint.
+
+Port overlay добавляет два связанных patch:
+
+- `patch-core_src_upstream__multiplexer.cpp` поднимает
+  `SERVER_EVENT_HEALTH_CHECK_ERROR`, когда health-check не находит установленную
+  сессию;
+- `patch-core_test_test__upstream__multiplexer.cpp` воспроизводит пул только с
+  открывающейся заменой и требует этот event.
+
+Patch использует существующий recovery path Client и не меняет HTTP/2,
+таймауты или число upstream-соединений. Для приёмки package после конфигурации
+build tree соберите и полностью прогоните target `test_upstream_multiplexer`.
+Patch не FreeBSD-specific: при переходе на следующий upstream tag проверьте
+наличие эквивалентного исправления и удалите либо перебазируйте overlay.
+
 ## Устанавливаемый файл
 
 Port устанавливает только `/usr/local/sbin/trusttunnel_client`. Wizard не
