@@ -8,8 +8,10 @@
 
 - чистая тестовая VM OPNsense 26.7;
 - root-доступ к консоли или SSH;
-- пакеты `trusttunnel-1.1.0.pkg`,
-  `trusttunnel-client-1.1.5.r.6.pkg` и нужный OPNsense plugin package;
+- endpoint: `png-1.6.58.pkg`, `libqrencode-4.1.1.pkg`,
+  `trusttunnel-1.1.0.pkg`, `os-trusttunnel-2.1.0.pkg`;
+- client: `trusttunnel-client-1.1.5.r.6.pkg`,
+  `os-trusttunnel-client-2.1.0.pkg`;
 - резервная копия конфигурации тестового firewall.
 
 Соберите бинарные пакеты по [`../freebsd-port/README.md`](../freebsd-port/README.md).
@@ -18,27 +20,54 @@ OPNsense-плагины собираются в штатном дереве `opn
 
 ## Установка пакетов
 
-Скопируйте артефакты на тестовую VM и сначала проверьте metadata:
+Скопируйте только нужный набор артефактов на тестовую VM. До `pkg add`
+сверьте вывод `sha256` с согласованным манифестом сборки (после release — с
+опубликованным манифестом того же выпуска) и проверьте metadata каждого файла:
 
 ```sh
-pkg info -F ./trusttunnel-1.1.0.pkg
-pkg info -F ./trusttunnel-client-1.1.5.r.6.pkg
-pkg add -f ./trusttunnel-1.1.0.pkg
-pkg add -f ./trusttunnel-client-1.1.5.r.6.pkg
-trusttunnel_endpoint --version
-trusttunnel_client --version
+sha256 ./png-1.6.58.pkg ./libqrencode-4.1.1.pkg \
+  ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
+sha256 ./trusttunnel-client-1.1.5.r.6.pkg \
+  ./os-trusttunnel-client-2.1.0.pkg
+for package in png-1.6.58.pkg libqrencode-4.1.1.pkg \
+  trusttunnel-1.1.0.pkg os-trusttunnel-2.1.0.pkg \
+  trusttunnel-client-1.1.5.r.6.pkg os-trusttunnel-client-2.1.0.pkg; do
+  pkg info -F "./${package}"
+done
 ```
 
-Затем установите только нужный plugin package и перезапустите Web UI:
+Устанавливайте зависимости, бинарник и соответствующий plugin package именно
+в таком порядке:
 
 ```sh
-pkg add -f ./os-trusttunnel-2.0.0.pkg
-# либо: pkg add -f ./os-trusttunnel-client-2.0.0.pkg
+# endpoint
+pkg add ./png-1.6.58.pkg ./libqrencode-4.1.1.pkg
+pkg add ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
+
+# либо client
+pkg add ./trusttunnel-client-1.1.5.r.6.pkg \
+  ./os-trusttunnel-client-2.1.0.pkg
+
 configctl webgui restart
 ```
 
-Не устанавливайте клиентский плагин в production: наличие бинарника и
-успешный `--version` не доказывают работоспособность FreeBSD TUN.
+Установка пакета может мигрировать модель OPNsense. Сначала выполняйте её на
+тестовой VM; локальный E2E не является разрешением на production deployment.
+
+## Настройка клиента
+
+- `tun_interface`: пустая строка для нового интерфейса или свободный `tun<N>`;
+- `use_existing`: требует явно заданный существующий `tun<N>`;
+- `mtu_size`: 576–9000, рекомендуемое значение по умолчанию 1350;
+- `bound_if`: обязательный физический исходящий интерфейс именно этого узла;
+- `change_system_dns`: только `false`; DNS управляется OPNsense;
+- `allowed_destinations`/`excluded_destinations`: только IPv4-сети.
+
+Не копируйте `bound_if` между узлами без проверки. При создании собственного
+TUN (`use_existing = false`) штатный stop удаляет интерфейс и свои маршруты.
+При `use_existing = true` backend сохраняет адреса, MTU и жизненный цикл
+чужого интерфейса, переключает packet-header mode через `TUNSIFHEAD=0` и
+снимает только добавленные им managed routes.
 
 ## Безопасная проверка
 
@@ -48,17 +77,36 @@ configctl webgui restart
    `/usr/local/etc/trusttunnel/` и журналы `configd`.
 3. Для endpoint запустите daemon на отдельном тестовом адресе/порту и
    проверьте `service trusttunnel_endpoint onestatus`.
-4. Для клиента ограничьтесь CLI smoke до появления FreeBSD TUN backend.
-   Функциональную поддержку можно заявлять только после E2E-теста с реальным
-   трафиком и контролем маршрутов/DNS.
+4. Для клиента проверьте `Certificate verified`, `VPN_SS_CONNECTED`, маршрут
+   через TUN, TCP-запрос, UDP DNS-запрос и рост RX/TX без ошибок.
+5. Выполните stop: созданный TUN должен исчезнуть, а исходный маршрут —
+   восстановиться. Автоматизированная основа проверки:
 
-## Удаление
+   ```sh
+   python3 -m unittest discover -s tests -v
+   sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
+     /usr/local/sbin/trusttunnel_client
+   ```
+
+## Откат и удаление
+
+Откат не равен удалению. При неудачном обновлении остановите новый service,
+переустановите заранее сохранённые пакеты предыдущей версии и восстановите
+резервную копию через **System → Configuration → Backups**. Затем проверьте
+configd, Web UI, правила и маршруты. Не используйте `pkg delete` как способ
+rollback: deinstall-скрипт может намеренно удалить принадлежащую плагину
+конфигурацию.
+
+Для окончательного удаления сначала отключите и остановите service, сохраните
+`/conf/config.xml`, затем удалите только выбранный plugin и его бинарник:
 
 ```sh
-pkg delete os-trusttunnel
-pkg delete os-trusttunnel-client
-pkg delete trusttunnel trusttunnel-client
+# endpoint
+pkg delete os-trusttunnel trusttunnel
+
+# либо client
+pkg delete os-trusttunnel-client trusttunnel-client
 ```
 
-Перед удалением сохраните `/conf/config.xml`. Проверяйте, что другие плагины и
-правила firewall не затронуты.
+После удаления убедитесь, что пользовательские правила, интерфейсы и другие
+плагины не затронуты.

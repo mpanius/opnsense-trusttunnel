@@ -5,6 +5,52 @@ All notable changes per release. Newest first.
 > Записи ниже описывают результаты соответствующей версии. Они не являются
 > доказательством совместимости текущих FreeBSD 15.1 packages.
 
+## v2.1.0 (2026-09-02, не опубликован)
+
+### Добавлено
+
+- FreeBSD `tun(4)` backend для TrustTunnelClient `v1.1.5-rc.6`: создание и
+  удаление принадлежащего клиенту интерфейса, point-to-point адресация,
+  маршруты, MTU и cleanup при остановке.
+- Контрактные Python-тесты для client renderer и OPNsense plugin, а также
+  `tests/freebsd_client_tun_smoke.sh` для проверки lifecycle TUN на FreeBSD.
+
+### Исправлено
+
+- Client renderer теперь формирует контракт upstream `v1.1.5-rc.6`, использует
+  namespace `trusttunnelclient`, сохраняет отдельные `hostname`/`custom_sni`
+  и атомарно записывает конфигурацию. Изменение системного DNS на OPNsense
+  запрещено; DNS управляется самой OPNsense.
+- Формы, MVC response path, `configd` actions и rc.d pidfile согласованы с
+  раздельным client plugin. Версии обоих плагинов повышены до `2.1.0`.
+- Endpoint plugin явно зависит от `libqrencode`.
+- Endpoint plugin принимает список `allowed_sni`, проверяет имена и отклоняет
+  alias вида `<label>.<main-host>`, зарезервированный под SNI-аутентификацию.
+- Endpoint materializer добавляет к выбранному leaf certificate связанный
+  OPNsense `caref`, чтобы daemon отдавал полный TLS chain; dangling CA
+  останавливает Apply с ошибкой.
+- Endpoint renderer валидирует все TOML до записи, не создаёт смешанный набор
+  при ошибке и не задаёт `credentials_file`, пока пользователи отсутствуют.
+- Endpoint Apply, как и client Apply, успешен только при отдельной строке `OK`
+  от завершившейся configd-chain.
+- Client plugin требует физический `bound_if` на FreeBSD и считает запуск
+  успешным только при явном ответе `OK` от `configd`.
+
+### Проверено
+
+- Локальный E2E на OPNsense `26.7.3_8`, FreeBSD ABI `1501000`: TLS certificate
+  verification и negative identity check, `VPN_SS_CONNECTED`, маршрут через
+  `tun0` с MTU 1350, HTTP 301, UDP DNS, рост счётчиков `0/0 -> 929/690` без
+  interface errors и удаление TUN/маршрута после остановки клиента.
+- Endpoint-side capture подтвердил certificate identity `api.www1.ru` и
+  отличный `custom_sni=www1.ru`; Let’s Encrypt certificate с SAN
+  `*.www1.ru`/`www1.ru`, TCP и UDP DNS прошли через одну сессию. Alias не
+  являлся поддоменом main hostname, поскольку этот формат зарезервирован
+  upstream под SNI-аутентификацию.
+- Этот результат подтверждает только тестовый стенд. Production deployment,
+  HA, длительная нагрузка и production routing ещё не подтверждены; GitHub
+  Release `v2.1.0` на момент этой записи не создан.
+
 ## v2.0.0 (2026-05-25)
 
 ### Changed (breaking — plugin split)
@@ -171,7 +217,7 @@ Client tun0 bidirectional counters: Ipkts=4 Ibytes=606 / Opkts=6 Obytes=391.
   exported successfully.
 - Client (FreeBSD): `trusttunnel_client` builds + runs on a test VM,
   reaches `VPN_SS_CONNECTED`, opens `tun0`
-  POINTOPOINT interface with `inet 172.16.219.2 --> 172.16.219.1`,
+  POINTOPOINT interface with `inet 192.0.2.2 --> 192.0.2.1`,
   and keeps the TCP control session alive.
 
 ### Fixed during initial iteration

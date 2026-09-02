@@ -1,10 +1,43 @@
-# FreeBSD Port Patches — TrustTunnel Client v1.1.4 (архив)
+# FreeBSD Port Patches — TrustTunnel Client
+
+## Текущий overlay: v1.1.5-rc.6 / FreeBSD 15
+
+Upstream `v1.1.5-rc.6` поддерживает Windows, macOS и Linux, но не содержит
+FreeBSD TUN backend. Текущий port overlay добавляет
+`net/src/os_tunnel_freebsd.cpp` и подключает его через CMake и tunnel factory.
+
+Backend открывает `/dev/tun` либо валидированное имя `tun<N>`, устанавливает
+`TUNSIFHEAD=0`, получает фактическое имя через `TUNGIFNAME` с полным
+`struct ifreq`, настраивает IPv4 POINTOPOINT, MTU и маршруты. В create-mode
+имя должно быть пустым или свободным `tun<N>`; при остановке backend удаляет
+принадлежащий ему интерфейс. В attach-mode он сохраняет адреса, MTU и lifecycle
+existing TUN, переключает packet-header mode и снимает только собственные
+managed routes. IPv6 и
+автоматическая замена системного DNS не реализованы: DNS должен настраиваться
+средствами OPNsense, `change_system_dns` — оставаться `false`.
+
+Минимальная проверка backend на FreeBSD запускается от root:
+
+```sh
+sh /path/to/opnsense-trusttunnel/tests/freebsd_client_tun_smoke.sh \
+  /usr/local/sbin/trusttunnel_client
+```
+
+Smoke проверяет create/cleanup, MTU 1350, отказ занять existing TUN без
+attach-mode и attach-mode route cleanup, но не
+реальный трафик. Локальный E2E на двух изолированных OPNsense 26.7.3_8 VM
+(FreeBSD ABI 1501000) дополнительно подтвердил
+маркеры `VPN_SS_CONNECTED` и успешного подключения к endpoint, маршрут
+`1.1.1.1 -> tun0`, TCP HTTP 301, UDP DNS, двусторонний рост счётчиков без
+ошибок и cleanup. Production validation этим не заменяется.
+
+## Архив: v1.1.4 / FreeBSD 14.3
 
 > Этот документ сохраняет историю портирования v1.1.4 на FreeBSD 14.3.
 > Текущая сборка v1.1.5-rc.6 использует другой набор overlay patches из
 > `freebsd-port/security/trusttunnel-client/files/` и `freebsd-port/conan/`.
-> Описанные здесь TUN patches не входят в текущий пакет автоматически и не
-> подтверждают работоспособность FreeBSD TUN.
+> Описанные ниже patches не являются описанием текущего backend; используйте
+> их только для разбора исторических сборок.
 
 Кумулятивный список всех patches, применённых для сборки и запуска
 `trusttunnel_client` (из репо TrustTunnel/TrustTunnelClient) на

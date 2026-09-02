@@ -28,9 +28,11 @@ PATH="$HOME/.venv/bin:$PATH" make -m /usr/share/mk -m "$PORTSDIR/Mk" fetch check
 дереве `opnsense/plugins` командой `make package`. Проверки исходников:
 
 ```sh
-fd -e php net -x php -l
-fd -e py net -x python3 -m py_compile
-fd -e xml net -x xmllint --noout
+python3 -m unittest discover -s tests -v
+fd -e php . net -x php -l
+fd -e py . net -x python3 -m py_compile
+fd -e xml . net -x xmllint --noout
+sh tests/freebsd_client_tun_smoke.sh  # на тестовой FreeBSD/OPNsense VM
 ```
 
 ## Стиль и именование
@@ -45,9 +47,9 @@ client. Не смешивайте их конфигурации.
 
 Для render-скриптов проверяйте валидные и ошибочные входы, права файлов и
 атомарную замену. UI, service и network changes требуют smoke-теста на чистой
-OPNsense 26.7 VM. `trusttunnel_client --version` не доказывает VPN: upstream
-`v1.1.5-rc.6` пока не реализует FreeBSD TUN. Заявляйте поддержку только после
-E2E с реальным трафиком, маршрутами и DNS.
+OPNsense 26.7 VM. Upstream `v1.1.5-rc.6` не реализует FreeBSD TUN, но overlay
+репозитория добавляет backend; проверяйте его E2E реальным TCP/UDP-трафиком,
+маршрутами, счётчиками и очисткой после stop. `--version` недостаточно.
 
 ## Коммиты и pull request
 

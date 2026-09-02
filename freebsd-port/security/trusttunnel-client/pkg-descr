@@ -1,10 +1,10 @@
-TrustTunnel VPN client (CLI).
+VPN-клиент TrustTunnel (CLI).
 
-C++/Rust client library + `trusttunnel_client` binary that connects to a
-TrustTunnel endpoint. Upstream supports system-wide tunnels and SOCKS5 on
-selected platforms, but v1.1.5-rc.6 has no FreeBSD TUN backend. This FreeBSD
-package is experimental until a functional OPNsense E2E test passes.
+Клиентская библиотека C++/Rust и бинарник `trusttunnel_client` для подключения
+к endpoint TrustTunnel. В upstream v1.1.5-rc.6 нет FreeBSD TUN backend; этот
+порт добавляет IPv4 tun(4) backend для OPNsense. IPv6 и автоматическая замена
+системного DNS не поддерживаются.
 
-Pair with `security/trusttunnel` for the server-side daemon.
+Серверный daemon поставляется портом `security/trusttunnel`.
 
 WWW: https://github.com/TrustTunnel/TrustTunnelClient

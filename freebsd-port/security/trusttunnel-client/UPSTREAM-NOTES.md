@@ -7,8 +7,8 @@
 - Commit: `9c6d5104e79af0ed230d2d30a083a090c933fd48`
 - Build system: CMake 3.24+, Conan 2 и Ninja; C++/C/Rust
 
-Tag является prerelease. FreeBSD 15.1 package устанавливается и проходит
-CLI smoke, но это не функциональная поддержка VPN.
+Tag является prerelease. Сам upstream не содержит FreeBSD TUN backend;
+функциональность добавляет и проверяет этот port overlay.
 
 ## Conan dependencies
 
@@ -26,15 +26,29 @@ Recipe patches лежат в `freebsd-port/conan/patches/` и применяют
 
 ## Source patches
 
-Port patches в `files/` минимально адаптируют platform guards, socket/ping
-code, CMake и network monitor для компиляции FreeBSD. Они не добавляют
-полноценный FreeBSD TUN backend. В upstream `net/src/os_tunnel.cpp`
-`make_vpn_tunnel()` поддерживает Windows, macOS и Linux; ветка FreeBSD
-возвращает `nullptr`.
+Port patches в `files/` адаптируют platform guards, socket/ping code, CMake и
+network monitor, а также добавляют `net/src/os_tunnel_freebsd.cpp`. В
+неизменённом upstream `make_vpn_tunnel()` поддерживает Windows, macOS и Linux;
+overlay подключает отдельную реализацию для FreeBSD.
 
-Следствие: пакет нельзя описывать как готовый system-wide VPN client на
-OPNsense. Для объявления поддержки нужны upstream/backend change и E2E на
-чистой OPNsense 26.7 VM с интерфейсом, маршрутами, DNS и реальным трафиком.
+Backend открывает `/dev/tun` или `tun<N>`, устанавливает `TUNSIFHEAD=0`,
+получает имя через `TUNGIFNAME` с `struct ifreq`, настраивает IPv4
+POINTOPOINT, MTU и маршруты. В create-mode имя должно быть пустым или свободным
+`tun<N>`; принадлежащий backend интерфейс удаляется при остановке. В
+attach-mode backend сохраняет адреса, MTU и lifecycle existing TUN,
+переключает packet-header mode и снимает только собственные managed routes.
+IPv6 недоступен. Системный DNS должен
+настраиваться через OPNsense, поэтому `change_system_dns=false` является
+обязательным ограничением.
+
+[`tests/freebsd_client_tun_smoke.sh`](../../../tests/freebsd_client_tun_smoke.sh)
+проверяет create/cleanup owned TUN, отказ от коллизии и attach-mode отдельно
+от endpoint.
+Локальный E2E на двух изолированных OPNsense 26.7.3_8 VM (FreeBSD ABI 1501000)
+подтвердил `VPN_SS_CONNECTED`,
+успешное подключение к endpoint, маршрут `1.1.1.1 -> tun0`, TCP HTTP 301, UDP
+DNS, двусторонние счётчики без ошибок и cleanup. Это не подтверждает
+production deployment.
 
 ## Устанавливаемый файл
 

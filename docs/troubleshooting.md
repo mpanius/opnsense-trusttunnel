@@ -36,13 +36,17 @@ grep -rn 'configdRun\|configdpRun' \
 
 ### **Buttons don't trigger any AJAX**
 
-Forms didn't render. Check that `forms/{server,user,client,peer}.xml` are
-present and the `IndexController.php` loads them:
+Forms didn't render. Endpoint forms `server.xml`/`user.xml` and client forms
+`client.xml`/`peer.xml` live in different plugin trees. Check both trees and
+their controllers:
 
 ```sh
 ls /usr/local/opnsense/mvc/app/controllers/OPNsense/TrustTunnel/forms/
+ls /usr/local/opnsense/mvc/app/controllers/OPNsense/TrustTunnelClient/forms/
 grep -A 1 'getForm' \
   /usr/local/opnsense/mvc/app/controllers/OPNsense/TrustTunnel/IndexController.php
+grep -A 1 'getForm' \
+  /usr/local/opnsense/mvc/app/controllers/OPNsense/TrustTunnelClient/IndexController.php
 ```
 
 ## Server (endpoint)
@@ -65,6 +69,10 @@ configctl trusttunnel server reconfigure
 ls -la /usr/local/etc/trusttunnel/server/certs/
 ```
 
+Версия 2.1.0 формирует `cert.pem` как leaf certificate плюс связанный OPNsense
+`caref`. Если CA удалён, Apply завершается ошибкой вместо отправки неполной
+цепочки.
+
 ```
 Couldn't create core instance: SettingsValidation(Invalid listen protocols settings: Not set)
 ```
@@ -79,23 +87,16 @@ grep -A 2 'listen_protocols' /usr/local/etc/trusttunnel/server/vpn.toml
 
 ### **Port 443 is held by `lighttpd` (Web UI), endpoint can't bind**
 
-OPNsense Web UI default port. Two fixes:
+OPNsense Web UI использует этот порт по умолчанию. Варианты:
 
-```sh
-# Option 1 — move Web UI to 8443
-python3 - <<'PY'
-import re
-fp='/conf/config.xml'
-t=open(fp).read()
-t=re.sub(r'(<webgui>.*?)<port/>', r'\1<port>8443</port>', t, flags=re.DOTALL)
-t=re.sub(r'(<webgui>.*?<port>)[^<]*(</port>)', r'\g<1>8443\g<2>', t, flags=re.DOTALL)
-open(fp,'w').write(t)
-PY
-configctl webgui restart
-```
+1. В **System → Settings → Administration** смените TCP port Web UI на 8443,
+   сохраните и примените настройку штатным интерфейсом. До Apply подтвердите
+   доступность management path и подготовьте rollback.
+2. В TrustTunnel plugin UI привяжите Endpoint к отдельному адресу, например
+   `Listen address = 203.0.113.10:443`.
 
-Option 2: bind the endpoint to a specific WAN IP via the plugin UI
-(`Listen address = 203.0.113.10:443`).
+Не редактируйте `/conf/config.xml` напрямую: automation должна использовать
+штатный OPNsense API с backup, validation и config lock.
 
 ### **Server log shows the client connecting then "unexpected end of file"**
 
@@ -106,12 +107,81 @@ request and the upstream replied + closed.
 
 ## Client (FreeBSD)
 
-> Раздел ниже относится к исторической v1.1.4 portation. В текущем upstream
-> v1.1.5-rc.6 `make_vpn_tunnel()` не создаёт FreeBSD TUN backend. Если CLI
-> запускается, но системный tunnel не появляется, это ожидаемое ограничение,
-> а не подтверждение корректности старых patches.
+Upstream `v1.1.5-rc.6` не содержит FreeBSD TUN backend, но текущий port overlay
+добавляет его как `net/src/os_tunnel_freebsd.cpp`. Установленный пакет должен
+создавать рабочий `tun<N>`; одного `--version` для проверки недостаточно.
 
-### **`trusttunnel_client` opens `tun0` and then exits**
+### **Клиент не создаёт `tun<N>` или пишет `Tunnel create error`**
+
+Сначала проверьте backend без реального endpoint из checkout репозитория.
+Команда требует root:
+
+```sh
+sh tests/freebsd_client_tun_smoke.sh /usr/local/sbin/trusttunnel_client
+```
+
+Ожидаются четыре сообщения `PASS`: create с `UP,POINTOPOINT` и MTU 1350,
+cleanup owned TUN, отказ занять existing TUN без `use_existing=true` и
+attach-mode с удалением managed route. При ошибке убедитесь, что пакет собран
+из текущего overlay и в бинарник включён `os_tunnel_freebsd.cpp`.
+
+### **Некорректное имя устройства или интерфейс остаётся после остановки**
+
+`device_name` должен быть пустым для автоматического `/dev/tun` или иметь вид
+`tun<N>`. Backend получает фактическое имя через `TUNGIFNAME` с полным
+`struct ifreq`, устанавливает `TUNSIFHEAD=0` и удаляет только созданный им
+интерфейс. В create-mode явно заданный `tun<N>` должен быть свободен, иначе
+запуск отклоняется. При `use_existing=true` оператор отвечает за жизненный
+цикл существующего TUN; backend сохраняет его адреса и MTU, переключает
+packet-header mode и снимает при stop только добавленные managed routes.
+
+Проверьте активный интерфейс и завершение процесса:
+
+```sh
+ifconfig -l | tr ' ' '\n' | grep '^tun[0-9][0-9]*$'
+service trusttunnel_client onestatus
+```
+
+### **Маршрут есть, но трафик не проходит**
+
+Текущий backend настраивает IPv4 POINTOPOINT, маршруты из `included_routes` и
+MTU из конфигурации (рекомендуемое значение — 1350). IPv6 пока недоступен.
+Проверьте имя, адреса, MTU, маршрут и счётчики:
+
+```sh
+ifconfig tun0
+route -n get 1.1.1.1
+netstat -ibn | grep tun0
+```
+
+Для функциональной проверки нужны одновременно TLS-маркеры подключения,
+TCP-ответ через туннель, UDP DNS, рост входящих и исходящих счётчиков без
+ошибок и cleanup после остановки. Локальный E2E на OPNsense 26.7.3_8 / FreeBSD
+ABI 1501000 это подтвердил; production-путь проверяется отдельно.
+
+### **Custom SNI виден, но endpoint пишет `SNI authentication failed`**
+
+Не задавайте `custom_sni` в форме `<label>.<main-host>`: endpoint разбирает
+такое имя как SNI-аутентификацию `<credentials>.<main-host>` раньше списка
+`allowed_sni`. Используйте отдельное разрешённое имя, например
+`front.example.net`, добавьте его в `allowed_sni` соответствующего main host и
+оставьте certificate identity в `hostname`. Проверяйте фактический ClientHello
+capture на endpoint и затем TCP/UDP data plane, а не только состояние
+`VPN_SS_CONNECTED`.
+
+### **Клиент пытается менять системный DNS**
+
+FreeBSD backend намеренно не заменяет системный DNS. Оставьте
+`change_system_dns = false` и управляйте DNS через OPNsense. Плагин отклоняет
+конфигурацию с включённой заменой DNS; не обходите эту проверку прямым запуском
+клиента.
+
+### Архив: портирование v1.1.4
+
+Следующие симптомы относятся только к историческому портированию v1.1.4 и не
+описывают текущий backend `v1.1.5-rc.6`.
+
+#### **`trusttunnel_client` opens `tun0` and then exits**
 
 Symptom from the v1 dev cycle: process gone, but `tun0` interface
 remains in the system. Caused by:
@@ -131,7 +201,7 @@ All three are in `docs/freebsd-port-patches.md`. If you built from
 scratch and didn't apply them, the binary will crash at one of these
 points.
 
-### **`Outbound interface is not specified` config error**
+#### **`Outbound interface is not specified` config error**
 
 `parse_tun_listener_config` rejects FreeBSD on unpatched upstream
 sources. The plugin's `config.cpp` patch extends the `#if defined`
@@ -139,7 +209,7 @@ guard to include `__FreeBSD__`. If using a self-built binary from
 unmodified upstream, the patches in `docs/freebsd-port-patches.md`
 group D1 are required.
 
-### **`bound_if` set, NetworkMonitor still hangs**
+#### **`bound_if` set, NetworkMonitor still hangs**
 
 `auto_network_monitor.cpp` patch (commit `93873ca`) adds an early
 return on FreeBSD when `bound_if` is non-empty — skips the
@@ -147,27 +217,27 @@ NetworkMonitor that has no FreeBSD impl. Verify your client config
 has `bound_if = "vtnet0"` (or your actual outbound interface) under
 `[listener.tun]`.
 
-### **`Address family not supported (47)`** when starting DNS proxy
+#### **`Address family not supported (47)`** when starting DNS proxy
 
 Linux `AF_KCM = 47`; FreeBSD has no such family. Caused by
 `SocketAddressStorage` reading the wrong byte as `sa_family` (the
 core bug fixed in round 23). With patches applied, you should see
 `AF_INET = 2` in the socket call.
 
-### **Routing — packets leave `tun0` but no response**
+#### **Packets leave `tt0` but no response**
 
 The TUN device on FreeBSD is POINTOPOINT — needs a peer IP. The
 plugin's `setup_if` writes:
 
 ```
-ifconfig tt0 inet 172.16.219.2 172.16.219.1 netmask 255.255.255.0 mtu 1280 up
+ifconfig tt0 inet 192.0.2.2 192.0.2.1 netmask 255.255.255.0 mtu 1280 up
 ```
 
 Verify:
 
 ```sh
 ifconfig tt0
-# inet 172.16.219.2 --> 172.16.219.1 netmask 0xffffff00
+# inet 192.0.2.2 --> 192.0.2.1 netmask 0xffffff00
 ```
 
 For test routing, add a host route via the TUN device:
@@ -267,7 +337,7 @@ Two common causes:
    blocked.
 2. **No route back on the client side** — the kernel routes the
    response packet but it doesn't return to the user app. Verify by
-   running `tcpdump -i tt0 -nn icmp` while pinging.
+   running `tcpdump -i tun0 -nn icmp` while pinging.
 
 ## Diagnostics
 
@@ -281,8 +351,8 @@ grep trusttunnel-server /var/log/system/system_*.log | tail -20
 
 # Client side
 service trusttunnel_client onestatus
-ifconfig tt0
-netstat -ibn | grep tt0
+ifconfig tun0
+netstat -ibn | grep tun0
 grep trusttunnel-client /var/log/system/system_*.log | tail -20
 ```
 
