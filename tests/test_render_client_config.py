@@ -109,6 +109,14 @@ class RenderClientConfigTest(unittest.TestCase):
             ["198.51.100.0/24", "203.0.113.0/24"],
         )
 
+    def test_missing_mtu_uses_plugin_model_default(self):
+        _, client, server = build_config()
+        client.remove(client.find("mtu_size"))
+
+        data = tomllib.loads(self.render.render_client_toml(client, server))
+
+        self.assertEqual(data["listener"]["tun"]["mtu_size"], 1350)
+
     def test_main_reads_real_model_mount_and_writes_mode_0600(self):
         root, _, _ = build_config()
         with tempfile.TemporaryDirectory() as tmp:

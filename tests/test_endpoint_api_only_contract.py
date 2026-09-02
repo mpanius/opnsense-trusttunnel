@@ -61,6 +61,24 @@ class EndpointApiOnlyContractTest(unittest.TestCase):
         ):
             self.assertIn(required, source)
 
+    def test_endpoint_boot_hooks_follow_enabled_model_state(self):
+        start_hook = (
+            PLUGIN / "src/etc/rc.syshook.d/start/50-trusttunnel-endpoint"
+        ).read_text(encoding="utf-8")
+        stop_hook = (
+            PLUGIN / "src/etc/rc.syshook.d/stop/50-trusttunnel-endpoint"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "pluginctl -g OPNsense.trusttunnel.server.enabled",
+            start_hook,
+        )
+        self.assertIn(
+            "configctl -dq trusttunnel server reconfigure",
+            start_hook,
+        )
+        self.assertIn("configctl -dq trusttunnel server stop", stop_hook)
+        self.assertNotIn("/conf/config.xml", start_hook + stop_hook)
+
 
 if __name__ == "__main__":
     unittest.main()

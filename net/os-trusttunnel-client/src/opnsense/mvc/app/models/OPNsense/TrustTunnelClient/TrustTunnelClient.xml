@@ -7,7 +7,10 @@
             <enabled type="BooleanField">
                 <default>0</default>
             </enabled>
-            <active_server type="UniqueIdField"/>
+            <active_server type="TextField">
+                <Mask>/^[0-9a-fA-F-]{36}$/</Mask>
+                <ValidationMessage>Active server must reference an existing server UUID</ValidationMessage>
+            </active_server>
             <mode type="OptionField">
                 <default>general</default>
                 <OptionValues>

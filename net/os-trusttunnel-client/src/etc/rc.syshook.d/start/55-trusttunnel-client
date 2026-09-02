@@ -1,0 +1,5 @@
+#!/bin/sh
+
+if [ "$(/usr/local/sbin/pluginctl -g OPNsense.trusttunnelclient.client.enabled 2>/dev/null)" = "1" ]; then
+    /usr/local/sbin/configctl -dq trusttunnelclient client reconfigure
+fi

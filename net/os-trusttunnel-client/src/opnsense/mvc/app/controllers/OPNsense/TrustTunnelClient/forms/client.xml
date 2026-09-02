@@ -40,7 +40,7 @@
         <id>trusttunnelclient.client.mtu_size</id>
         <label>TUN MTU</label>
         <type>text</type>
-        <help>FreeBSD tunnel MTU; 1350 is the upstream default.</help>
+        <help>Plugin model default is 1350; lower it only when end-to-end PMTUD fails.</help>
     </field>
     <field>
         <id>trusttunnelclient.client.change_system_dns</id>

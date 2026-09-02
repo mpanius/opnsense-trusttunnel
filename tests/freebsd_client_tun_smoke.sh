@@ -3,6 +3,7 @@
 set -eu
 
 client_bin=${1:-/usr/local/sbin/trusttunnel_client}
+bound_if=${2:-vtnet0}
 
 if [ "$(uname -s)" != "FreeBSD" ]; then
     echo "SKIP: FreeBSD is required" >&2
@@ -35,7 +36,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-cat >"$config_path" <<'EOF'
+cat >"$config_path" <<EOF
 loglevel = "debug"
 vpn_mode = "selective"
 killswitch_enabled = false
@@ -54,7 +55,7 @@ upstream_protocol = "http2"
 anti_dpi = false
 
 [listener.tun]
-bound_if = "vtnet0"
+bound_if = "${bound_if}"
 included_routes = []
 excluded_routes = []
 mtu_size = 1350

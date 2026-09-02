@@ -144,18 +144,22 @@ $(function () {
         formatTokenizersUI();
         $('.selectpicker').selectpicker('refresh');
     });
-    ajaxGet('/api/trusttunnelclient/client/get/', {}, function (data) {
+    // Initialize the grid independently from the active-server lookup. A
+    // failed auxiliary request must not leave the entire Client page empty.
+    $("#grid-servers").UIBootgrid({
+        search: '/api/trusttunnelclient/client/searchServer/',
+        get:    '/api/trusttunnelclient/client/getServer/',
+        set:    '/api/trusttunnelclient/client/setServer/',
+        add:    '/api/trusttunnelclient/client/addServer/',
+        del:    '/api/trusttunnelclient/client/delServer/',
+        options: gridOpts
+    });
+
+    ajaxGet('/api/trusttunnelclient/client/get', {}, function (data) {
         if (data && data.trusttunnelclient && data.trusttunnelclient.client && data.trusttunnelclient.client.active_server) {
             window.__tt_activeServer = data.trusttunnelclient.client.active_server;
         }
-        $("#grid-servers").UIBootgrid({
-            search: '/api/trusttunnelclient/client/searchServer/',
-            get:    '/api/trusttunnelclient/client/getServer/',
-            set:    '/api/trusttunnelclient/client/setServer/',
-            add:    '/api/trusttunnelclient/client/addServer/',
-            del:    '/api/trusttunnelclient/client/delServer/',
-            options: gridOpts
-        });
+        $("#grid-servers").bootgrid('reload');
     });
 
     $('#btnApplyClient').on('click', function () {

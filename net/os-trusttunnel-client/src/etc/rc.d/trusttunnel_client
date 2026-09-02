@@ -22,22 +22,46 @@ load_rc_config $name
 
 : ${trusttunnel_client_enable:="NO"}
 : ${trusttunnel_client_config:="/usr/local/etc/trusttunnel/client/trusttunnel_client.toml"}
+: ${trusttunnel_client_binary:="/usr/local/sbin/trusttunnel_client"}
+: ${trusttunnel_client_args:="-c ${trusttunnel_client_config}"}
 : ${trusttunnel_client_user:="root"}
 
 pidfile=/var/run/${name}.pid
+child_pidfile=/var/run/${name}.child.pid
+client_binary=${trusttunnel_client_binary}
 command=/usr/sbin/daemon
-procname=/usr/local/sbin/trusttunnel_client
-command_args="-S -T trusttunnel-client -p ${pidfile} ${procname} \
-        -c ${trusttunnel_client_config}"
+procname=/usr/sbin/daemon
+command_args="-S -T trusttunnel-client -r -R 5 -P ${pidfile} \
+        -p ${child_pidfile} ${client_binary} ${trusttunnel_client_args}"
 
-required_files="${trusttunnel_client_config} ${procname}"
+required_files="${trusttunnel_client_config} ${client_binary}"
 
 start_precmd=trusttunnel_client_precmd
+status_cmd=trusttunnel_client_status
 
 trusttunnel_client_precmd()
 {
     install -d -m 0750 -o root -g wheel /var/log/trusttunnel || return 1
     return 0
+}
+
+trusttunnel_client_status()
+{
+    supervisor_pid=$(check_pidfile "$pidfile" "$procname")
+    client_name=${client_binary##*/}
+    child_pids=$(pgrep -P "$supervisor_pid" -x "$client_name" 2>/dev/null || true)
+    set -- $child_pids
+
+    if [ -n "$supervisor_pid" ] && [ "$#" -eq 1 ]; then
+        echo "${name} is running as supervisor pid ${supervisor_pid} with client child pid ${1}."
+        return 0
+    fi
+    if [ -n "$supervisor_pid" ]; then
+        echo "${name} supervisor pid ${supervisor_pid} is running without exactly one live client child." >&2
+        return 1
+    fi
+    echo "${name} is not running." >&2
+    return 1
 }
 
 run_rc_command "$1"
