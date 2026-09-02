@@ -36,7 +36,6 @@
             <cert_ref type="CertificateField">
                 <Required>N</Required>
             </cert_ref>
-            <firewall_rule_uuid type="UniqueIdField"/>
             <users>
                 <user type="ArrayField">
                     <username type="TextField">

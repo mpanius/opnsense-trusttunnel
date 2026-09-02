@@ -18,9 +18,8 @@
  * The client role lives in the separate os-trusttunnel-client plugin; its
  * hooks (TUN device, client service, client syslog facility) are NOT here.
  *
- * Auto-firewall rule is NOT a hook — ServerController persists it directly
- * into /conf/config.xml <filter><rule> with a <plugin_managed>os-trusttunnel
- * </plugin_managed> marker (Codex finding #1).
+ * Certificates and firewall rules stay owned by the native OPNsense
+ * subsystems and are not created or removed by this plugin hook.
  * --------------------------------------------------------------------------
  */
 

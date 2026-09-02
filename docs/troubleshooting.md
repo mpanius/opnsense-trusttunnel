@@ -253,12 +253,10 @@ under `trusttunnel-server` facility for `New TCP client:` entry.
 
 ## Network / firewall
 
-### **Server-side OPNsense Pass rule auto-created but blocking**
+### **WAN-правило OPNsense создано через API, но трафик блокируется**
 
-The plugin's `syncFirewallRule()` writes a `<filter><rule>` entry
-into `/conf/config.xml` with `<plugin_managed>os-trusttunnel</plugin_managed>`.
-If it appears under **Firewall → Rules → WAN** but traffic is still
-blocked, double-check:
+Plugin не создаёт firewall rules. Найдите exact rule через
+`GET /api/firewall/filter/searchRule`, затем проверьте:
 
 1. Rule order — must be above any blanket Block rule.
 2. Listen address matches the rule's `destination` field.
@@ -298,13 +296,11 @@ Section path is lowercase by OPNsense convention. Passwords ride on
 `nosync="1"` field-level stripping — they're left blank on the
 secondary; operator must re-enter them after promoting the secondary.
 
-### **Auto-firewall rule duplicated on the secondary**
+### **WAN-правило продублировалось на secondary**
 
-`syncFirewallRule()` walks `<filter>` looking for the marker
-`<plugin_managed>os-trusttunnel</plugin_managed>` keyed by the stored
-UUID. On the secondary, the UUID matches (sync'd from primary), so
-there's no duplication. If you see two rules with the same UUID,
-that's the bug — file an issue.
+Plugin не выполняет HA sync firewall rules. Сравните exact UUID через
+`GET /api/firewall/filter/searchRule` на каждой ноде и удалите только
+подтверждённый duplicate штатным `delRule/<uuid>`. Не правьте `config.xml`.
 
 ## Performance
 

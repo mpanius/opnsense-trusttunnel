@@ -69,6 +69,22 @@ TUN (`use_existing = false`) штатный stop удаляет интерфей
 чужого интерфейса, переключает packet-header mode через `TUNSIFHEAD=0` и
 снимает только добавленные им managed routes.
 
+## Сертификат и WAN-правило Endpoint
+
+Plugin не импортирует сертификаты и не создаёт firewall rules самостоятельно.
+До включения Endpoint отдельными API-транзакциями:
+
+1. найдите либо импортируйте сертификат через `/api/trust/cert/search` и
+   `/api/trust/cert/add`, затем выберите его `refid` в поле TLS certificate;
+2. найдите exact WAN rule через `/api/firewall/filter/searchRule`; при его
+   отсутствии добавьте минимальный TCP rule на фактические address/port через
+   `/api/firewall/filter/addRule` и выполните `/api/firewall/filter/apply`;
+3. сохраните UUID правила для отдельного API-only rollback.
+
+Перед каждым POST обязательны fresh backup, read-back, exact redacted diff и
+явное подтверждение. Не редактируйте `/conf/config.xml` и не считайте package
+uninstall способом удаления сертификата или firewall rule.
+
 ## Безопасная проверка
 
 1. Убедитесь, что страницы **VPN → TrustTunnel** или **TrustTunnel Client**
@@ -88,14 +104,26 @@ TUN (`use_existing = false`) штатный stop удаляет интерфей
      /usr/local/sbin/trusttunnel_client
    ```
 
+Package lifecycle Endpoint проверяйте только на изолированной OPNsense VM.
+Smoke удаляет и повторно устанавливает plugin, сравнивает полный SHA256
+`/conf/config.xml` и проверяет cleanup derived runtime:
+
+```sh
+TT_SSH_TARGET=root@192.0.2.10 \
+TT_SSH_KEY=/secure/test_ed25519 \
+TT_KNOWN_HOSTS=/secure/test_known_hosts \
+TT_ENDPOINT_PLUGIN_PKG=/artifacts/os-trusttunnel-2.1.0.pkg \
+  sh tests/smoke_endpoint_package_lifecycle.sh
+```
+
 ## Откат и удаление
 
 Откат не равен удалению. При неудачном обновлении остановите новый service,
-переустановите заранее сохранённые пакеты предыдущей версии и восстановите
-резервную копию через **System → Configuration → Backups**. Затем проверьте
-configd, Web UI, правила и маршруты. Не используйте `pkg delete` как способ
-rollback: deinstall-скрипт может намеренно удалить принадлежащую плагину
-конфигурацию.
+переустановите заранее сохранённые пакеты предыдущей версии. Восстановление
+конфигурации выполняйте только штатным
+`POST /api/core/backup/revertBackup/<exact-pre-change-id>` после отдельного
+подтверждения; затем проверьте configd, Web UI, правила и маршруты. Не
+используйте `pkg delete` как способ rollback persistent-конфигурации.
 
 Для окончательного удаления сначала отключите и остановите service, сохраните
 `/conf/config.xml`, затем удалите только выбранный plugin и его бинарник:
@@ -108,5 +136,7 @@ pkg delete os-trusttunnel trusttunnel
 pkg delete os-trusttunnel-client trusttunnel-client
 ```
 
-После удаления убедитесь, что пользовательские правила, интерфейсы и другие
-плагины не затронуты.
+После удаления отдельно удалите созданный deployment workflow сертификат или
+WAN rule только если у них нет других consumers, используя их native API.
+Убедитесь, что пользовательские правила, интерфейсы и другие плагины не
+затронуты.

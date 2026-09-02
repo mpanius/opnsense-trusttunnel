@@ -35,9 +35,10 @@ Web UI/API
   → trusttunnel_endpoint rc.d service
 ```
 
-Plugin управляет только своим WAN-правилом, помеченным
-`<plugin_managed>os-trusttunnel</plugin_managed>`. При disable/uninstall оно
-должно удаляться без изменения пользовательских правил.
+Plugin не управляет firewall, NAT или System Trust. Сертификат импортируется
+через штатный `/api/trust/cert/*`, а WAN-правило создаётся и удаляется отдельной
+транзакцией `/api/firewall/filter/*` с собственным UUID, backup и rollback.
+Отключение или удаление package не изменяет эти объекты автоматически.
 
 ## Client apply path
 

@@ -23,7 +23,7 @@
         <id>trusttunnel.server.cert_ref</id>
         <label>TLS certificate</label>
         <type>dropdown</type>
-        <help>Pick a cert from System &#8594; Trust &#8594; Certificates (issued by os-acme-client or self-signed).</help>
+        <help>Pick a cert created through the native System Trust API or os-acme-client.</help>
     </field>
     <field>
         <id>trusttunnel.server.allowed_sni</id>

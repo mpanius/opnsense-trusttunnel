@@ -1,9 +1,7 @@
 {#
  # Copyright (c) 2026 Mikhail Panyushkin <mpanius@gmail.com>
  # BSD-2-Clause — see LICENSE.
- # Server tab — bootgrid for users + per-user Export Deeplink modal (QR).
- # Server settings form, self-signed cert generation modal, firewall
- # rule status will be wired in Tasks 9-11.
+ # Server tab — settings, users and per-user Export Deeplink modal (QR).
  #}
 
 {{ partial("layout_partials/base_form",['fields':serverForm,'id':'frm_ServerSettings']) }}
@@ -16,9 +14,6 @@
                 <button class="btn btn-primary" id="btnApplyServer" type="button">
                     <b>{{ lang._('Apply') }}</b>
                     <i id="btnApplyServerProgress"></i>
-                </button>
-                <button class="btn btn-default" id="btnGenSelfSigned" type="button">
-                    <span class="fa fa-certificate"></span> {{ lang._('Generate self-signed cert') }}
                 </button>
                 <br/><br/>
             </section>
@@ -62,36 +57,6 @@
 
 {# --- Add/Edit User modal (driven by base_dialog from userForm) --- #}
 {{ partial("layout_partials/base_dialog",['fields':userForm,'id':'DialogUser','label':lang._('User')]) }}
-
-{# --- Generate self-signed cert modal --- #}
-<div id="DialogGenCert" class="modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-                <h4 class="modal-title">{{ lang._('Generate self-signed certificate') }}</h4>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>{{ lang._('Common Name') }}</label>
-                    <input type="text" class="form-control" id="GenCN" placeholder="vpn.example.com">
-                </div>
-                <div class="form-group">
-                    <label>{{ lang._('Validity (days)') }}</label>
-                    <input type="number" class="form-control" id="GenDays" value="365" min="1" max="3650">
-                </div>
-                <div class="form-group">
-                    <label>{{ lang._('Subject Alternative Names (comma-separated)') }}</label>
-                    <input type="text" class="form-control" id="GenSans" placeholder="vpn.example.com,alt.example.com">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-default" data-dismiss="modal">{{ lang._('Cancel') }}</button>
-                <button class="btn btn-primary" id="GenSubmit">{{ lang._('Generate') }}</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 {# --- Export Deeplink modal --- #}
 <div id="DialogDeeplink" class="modal" tabindex="-1" role="dialog">
@@ -169,42 +134,6 @@ $(function () {
                     message: (data && data.output) ? data.output : ((data && data.error) || "{{ lang._('Unknown') }}")
                 });
             });
-        });
-    });
-
-    // Generate self-signed cert flow.
-    $('#btnGenSelfSigned').on('click', function () {
-        $('#GenCN').val($('#row_trusttunnel\\.server\\.hostname').val() || 'vpn.example.com');
-        $('#GenDays').val('365');
-        $('#GenSans').val('');
-        $('#DialogGenCert').modal('show');
-    });
-    $('#GenSubmit').on('click', function () {
-        var $btn = $(this).prop('disabled', true);
-        ajaxCall('/api/trusttunnel/server/generateSelfSigned', {
-            common_name: $('#GenCN').val(),
-            days:        $('#GenDays').val(),
-            sans:        $('#GenSans').val()
-        }, function (data, status) {
-            $btn.prop('disabled', false);
-            if (data && data.status === 'ok') {
-                $('#DialogGenCert').modal('hide');
-                BootstrapDialog.show({
-                    title: "{{ lang._('Certificate generated') }}",
-                    type:  BootstrapDialog.TYPE_SUCCESS,
-                    message: "{{ lang._('Cert created (refid:') }} " + data.refid + "). " + "{{ lang._('Refresh the cert dropdown to select it.') }}"
-                });
-                // Re-load form to pick up the new cert in the dropdown.
-                mapDataToFormUI({'frm_ServerSettings': '/api/trusttunnel/server/get'});
-            } else {
-                var msg = (data && data.errors) ? data.errors.join('; ')
-                        : ((data && data.error) || "{{ lang._('Unknown error') }}");
-                BootstrapDialog.show({
-                    title: "{{ lang._('Generation failed') }}",
-                    type:  BootstrapDialog.TYPE_DANGER,
-                    message: msg
-                });
-            }
         });
     });
 

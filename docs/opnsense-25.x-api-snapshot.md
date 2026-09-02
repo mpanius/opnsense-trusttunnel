@@ -38,7 +38,8 @@ class CertificateField extends BaseListField
 
     /**
 
---- Note: plugin_managed grep on core returned 0 hits ---
-Confirms plan assumption: <plugin_managed> is a custom-tag pattern (os-acme-client uses it).
-Our ServerController stores the canonical UUID in <server><firewall_rule_uuid> and uses the
-tag as a discovery marker only. Compatible with CE 26.1.8_5 unchanged.
+--- Historical note: plugin_managed grep on core returned 0 hits ---
+Это подтвердило, что `plugin_managed` не является контрактом штатного
+Firewall API. Экспериментальная реализация с прямой записью legacy rule была
+удалена до выпуска `2.1.0`; текущий plugin не хранит
+`server.firewall_rule_uuid` и не изменяет firewall при Apply/uninstall.

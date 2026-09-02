@@ -35,6 +35,10 @@ All notable changes per release. Newest first.
   от завершившейся configd-chain.
 - Client plugin требует физический `bound_if` на FreeBSD и считает запуск
   успешным только при явном ответе `OK` от `configd`.
+- Endpoint больше не пишет legacy firewall и System Trust напрямую через
+  `Config::save()`. Сертификаты и WAN rules принадлежат штатным API
+  `/api/trust/cert/*` и `/api/firewall/filter/*`; package install/uninstall
+  изменяет только plugin model и производные runtime-файлы.
 
 ### Проверено
 
@@ -50,6 +54,9 @@ All notable changes per release. Newest first.
 - Этот результат подтверждает только тестовый стенд. Production deployment,
   HA, длительная нагрузка и production routing ещё не подтверждены; GitHub
   Release `v2.1.0` на момент этой записи не создан.
+- Package lifecycle smoke на изолированной OPNsense VM подтвердил, что
+  `pkg delete` удаляет derived runtime Endpoint, а uninstall и повторная
+  установка сохраняют полный SHA256 `/conf/config.xml` без изменений.
 
 ## v2.0.0 (2026-05-25)
 
