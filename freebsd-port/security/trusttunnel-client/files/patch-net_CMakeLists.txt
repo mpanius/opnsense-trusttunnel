@@ -1,6 +1,13 @@
 --- net/CMakeLists.txt.orig
 +++ net/CMakeLists.txt
-@@ -78,7 +78,7 @@ if (WIN32)
+@@ -50,4 +50,6 @@ elseif(WIN32)
+     list(APPEND SOURCE_FILES ${NET_SOURCE_DIR}/wincrypt_helper.cpp)
+ elseif(CMAKE_SYSTEM_NAME STREQUAL Linux)
+     list(APPEND SOURCE_FILES ${NET_SOURCE_DIR}/os_tunnel_linux.cpp)
++elseif(CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
++    list(APPEND SOURCE_FILES ${NET_SOURCE_DIR}/os_tunnel_freebsd.cpp)
+ endif()
+@@ -78,6 +80,6 @@ if (WIN32)
      target_link_libraries(vpnlibs_net wsock32 ws2_32 ntdll iphlpapi)
  else()
 -    if (NOT ANDROID)
