@@ -38,7 +38,6 @@
             </change_system_dns>
             <bound_if type="TextField">
                 <default></default>
-                <Required>Y</Required>
                 <Mask>/^[A-Za-z][A-Za-z0-9_.-]{0,14}$/</Mask>
             </bound_if>
             <servers>

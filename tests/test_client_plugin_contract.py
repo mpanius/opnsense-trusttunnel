@@ -20,7 +20,10 @@ class ClientPluginContractTest(unittest.TestCase):
         self.assertEqual(client.findtext("mtu_size/default"), "1350")
         self.assertEqual(client.findtext("change_system_dns/default"), "0")
         self.assertEqual(client.findtext("bound_if/default"), "")
-        self.assertEqual(client.findtext("bound_if/Required"), "Y")
+        self.assertIsNone(
+            client.find("bound_if/Required"),
+            "bound_if must stay optional while a fresh OPNsense model is migrated",
+        )
         self.assertEqual(client.find("active_server").get("type"), "TextField")
         self.assertIn("{36}", client.findtext("active_server/Mask"))
         for field in (
@@ -65,6 +68,7 @@ class ClientPluginContractTest(unittest.TestCase):
         self.assertIn("validateRuntimeInterfaces", controller)
         self.assertIn("use_existing", controller)
         self.assertIn("/sbin/ifconfig -l", controller)
+        self.assertIn("bound_if is required on FreeBSD/OPNsense", controller)
 
     def test_api_view_and_configd_use_client_defaults(self):
         controller = (
