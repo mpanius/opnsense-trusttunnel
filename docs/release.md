@@ -1,8 +1,9 @@
 # Выпуск пакетов
 
 Этот runbook описывает подготовку релиза для OPNsense 26.7 / FreeBSD 15.1
-amd64. Он не подтверждает production readiness: публикация запрещена, пока не
-пройдены все проверки и E2E-gates ниже.
+amd64. Публикация запрещена, пока не пройдены проверки артефактов и E2E-gates
+ниже. Релиз не заменяет site-specific firewall/HA validation и не подтверждает
+24-часовое окно стабильности либо удаление предыдущего rollback path.
 
 ## 1. Собрать пакеты
 
@@ -85,17 +86,30 @@ sh /path/to/opnsense-trusttunnel/tests/freebsd_client_supervision_smoke.sh \
   /usr/local/sbin/trusttunnel_client
 ```
 
+На чистой Client VM установка plugin должна успешно мигрировать пустую модель
+`0.0.0 -> 2.1.0` без `ValidationException` до настройки `bound_if`. Затем
+negative `Apply`/`reconfigure` с пустым `bound_if` обязан вернуть
+`bound_if is required on FreeBSD/OPNsense`; после выбора существующего
+физического интерфейса тот же action должен пройти. Model migration и runtime
+validation — два отдельных release-gate.
+
 Обязательный E2E-gate — реальный трафик через endpoint и `tun(4)`: валидный
 TLS/SNI и аутентификация, маршрут через TUN, TCP и UDP DNS, рост счётчиков без
 ошибок, штатный restart и cleanup интерфейса/маршрута после остановки. Одни
 `--version`, установка пакета или SOCKS/CONNECT smoke этот gate не закрывают.
 
-Локальный прогон на OPNsense `26.7.3_8` (FreeBSD ABI `1501000`) подтвердил
-проверку TLS-сертификата и состояние `VPN_SS_CONNECTED`; маршрут через `tun0`
-с MTU 1350 дал HTTP 301 и ответ UDP DNS. Счётчики выросли с `0/0` до
-`929/690` bytes без interface errors, а после штатного stop исчезли созданные
-TUN-интерфейс и маршрут. Это evidence тестового стенда, а не подтверждение
-production deployment, HA, длительной нагрузки или production-маршрутизации.
+Изолированные прогоны на OPNsense 26.7 (FreeBSD ABI `1501000`) подтвердили
+clean migration, TLS/SNI/auth positive и negative cases, `VPN_SS_CONNECTED`,
+маршрут через `tun0` с MTU 1350, TCP, UDP DNS, штатный restart и cleanup.
+Full-duplex harness передал ровно 10 GiB в каждом направлении за 1906,5
+секунды с совпавшими SHA256 и нулевыми `Ierrs/Oerrs/Drop` при boot-time
+`net.link.ifqmaxlen=1024`. Controlled HA failover подтвердил recovery и
+выбор secondary, но data plane остановился на TLS trust. После исправления
+certificate ownership повторный failover не проводился и не является
+доказательством релиза. Production cutover подтвердил прикладную TCP/UDP
+матрицу и return path через TrustTunnel. Предыдущий маршрут остаётся rollback
+path до отдельного 24-часового stability gate.
+
 Отличающийся от certificate identity разрешённый `custom_sni` подтверждён
 endpoint-side capture; публично доверенный сертификат с подходящими SAN прошёл
 проверку, через ту же сессию прошли TCP и UDP DNS.
@@ -148,10 +162,69 @@ done
 Наличие AppleDouble `._*` в package считается release blocker даже если
 `pkg add -f` способен проигнорировать конфликтующие записи.
 
-## 5. Подготовить публикацию
+## 5. Опубликовать и проверить release
 
-Создавайте tag и GitHub Release только из commit, прошедшего повторный аудит.
-Приложите четыре `.pkg`, `SHA256SUMS` и release notes с точными OPNsense,
-FreeBSD ABI, upstream tags/commit SHA, результатами E2E и ограничениями.
-Подписанный pkg-репозиторий документируется только после появления реального
-публичного ключа и доступного HTTPS endpoint.
+Создавайте annotated tag только из commit, прошедшего повторный аудит и уже
+совпадающего с `origin/master`. В каталоге артефактов должны находиться только
+четыре ожидаемых `.pkg` и `SHA256SUMS`:
+
+```sh
+release_commit=$(git rev-parse HEAD)
+test "$release_commit" = "$(git rev-parse origin/master)" || exit 1
+test -z "$(git status --porcelain --untracked-files=no)" || exit 1
+
+git tag -a v2.1.0 -m 'TrustTunnel OPNsense plugins v2.1.0' "$release_commit"
+git push origin refs/tags/v2.1.0
+
+gh release create v2.1.0 \
+  trusttunnel-1.1.0.pkg \
+  trusttunnel-client-1.1.5.r.6_1.pkg \
+  os-trusttunnel-2.1.0.pkg \
+  os-trusttunnel-client-2.1.0.pkg \
+  SHA256SUMS \
+  --verify-tag \
+  --title 'TrustTunnel OPNsense plugins v2.1.0' \
+  --notes-file RELEASE-NOTES.md
+```
+
+Release notes должны фиксировать source commit, OPNsense/FreeBSD ABI,
+upstream tags, E2E-результаты, IPv4-only Client и незавершённый 24-часовой
+stability gate. Подписанный pkg-репозиторий документируется только после
+появления реального публичного ключа и доступного HTTPS endpoint.
+
+После публикации проверьте release без GitHub-аутентификации в чистом
+каталоге, повторно скачайте все assets и сверьте checksum:
+
+```sh
+release_dir=$(mktemp -d)
+cd "$release_dir" || exit 1
+base=https://github.com/mpanius/opnsense-trusttunnel/releases/download/v2.1.0
+for asset in \
+  trusttunnel-1.1.0.pkg \
+  trusttunnel-client-1.1.5.r.6_1.pkg \
+  os-trusttunnel-2.1.0.pkg \
+  os-trusttunnel-client-2.1.0.pkg \
+  SHA256SUMS
+do
+  curl -fLO "$base/$asset" || exit 1
+done
+sha256sum -c SHA256SUMS
+
+curl -fsSL \
+  https://api.github.com/repos/mpanius/opnsense-trusttunnel/releases/tags/v2.1.0 |
+  jq -e '
+    .tag_name == "v2.1.0" and
+    ([.assets[].name] | sort) ==
+    (["SHA256SUMS", "os-trusttunnel-2.1.0.pkg",
+      "os-trusttunnel-client-2.1.0.pkg", "trusttunnel-1.1.0.pkg",
+      "trusttunnel-client-1.1.5.r.6_1.pkg"] | sort)
+  '
+```
+
+API `target_commitish` не является достаточной проверкой annotated tag:
+сравните peeled commit удалённого tag с локальным `release_commit`:
+
+```sh
+remote_commit=$(git ls-remote origin 'refs/tags/v2.1.0^{}' | awk '{print $1}')
+test "$remote_commit" = "$release_commit" || exit 1
+```

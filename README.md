@@ -20,18 +20,22 @@ FreeBSD TUN backend, поэтому overlay этого репозитория д
 когда все установленные upstream-сессии исчезли, а в пуле остались только
 открывающиеся замены. Текущая версия обоих plugin packages — 2.1.0.
 
-Локальный E2E на двух чистых OPNsense 26.7.3_8 VM (ABI `1501000`)
-подтвердил TLS-сессию, маршрут через `tun0` с MTU 1350, TCP и UDP DNS-трафик,
-рост счётчиков без ошибок и очистку интерфейса/маршрута после остановки.
-Это доказательство тестового стенда, а не подтверждение production deployment
-или production support; базовый E2E не проверяет обрыв всего upstream pool —
-recovery принимается отдельным regression/runtime smoke. Клиентская версия
+Изолированный E2E на OPNsense 26.7 подтвердил TLS/SNI/auth, маршрут через
+`tun0` с MTU 1350, TCP и UDP DNS, full-duplex передачу 10 GiB в каждом
+направлении без corruption и очистку интерфейса/маршрута после остановки.
+Отдельный controlled cutover подтвердил production-маршрутизацию. При отказе
+active endpoint Client запустил recovery branch и выбрал secondary, но
+end-to-end failover остановился на TLS trust; после исправления certificate
+ownership повторный failover не входит в доказательства релиза. Обязательны
+site-specific firewall/HA validation; 24-часовой stability window и удаление
+предыдущего rollback path также не проверены релизом. Клиентская версия
 остаётся prerelease.
 
 ## Возможности плагинов
 
 - Endpoint: выбор сертификата OPNsense, управление пользователями, экспорт
-  deeplink/QR, конфигурация `configd` и управляемое WAN-правило.
+  deeplink/QR и конфигурация `configd`; WAN-правило создаётся отдельно штатным
+  Firewall API.
 - Client: импорт deeplink с предварительным просмотром, генерация
   конфигурации и IPv4 FreeBSD TUN backend с owned cleanup.
 - Раздельные пакеты: endpoint не тянет клиентскую зависимость и наоборот.
@@ -41,10 +45,13 @@ recovery принимается отдельным regression/runtime smoke. К�
 Процедура создания FreeBSD builder и сборки обоих портов описана в
 [`freebsd-port/README.md`](freebsd-port/README.md). Проверяемая установка на
 OPNsense приведена в [`docs/install.md`](docs/install.md), выпуск — в
-[`docs/release.md`](docs/release.md).
+[`docs/release.md`](docs/release.md). Текущие изменения перечислены в
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md), известные отказы — в
+[`docs/troubleshooting.md`](docs/troubleshooting.md).
 
-Собранные `.pkg` не хранятся в Git. До появления проверенного GitHub Release
-пакеты следует собирать самостоятельно и сверять SHA-256 перед установкой.
+Собранные `.pkg` не хранятся в Git. Готовые пакеты опубликованы в
+[GitHub Release v2.1.0](https://github.com/mpanius/opnsense-trusttunnel/releases/tag/v2.1.0);
+перед установкой сверяйте каждый файл с приложенным `SHA256SUMS`.
 
 ## Связанные проекты
 

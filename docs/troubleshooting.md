@@ -1,7 +1,7 @@
 # Troubleshooting — os-trusttunnel
 
-Real issues observed during v1 development on OPNsense 26.1.8_5,
-with their causes and fixes.
+Реальные отказы, наблюдавшиеся при разработке и проверке версий 1.x–2.1.0 на
+OPNsense 26.1/26.7, с их причинами и способами диагностики.
 
 ## Plugin UI
 
@@ -129,8 +129,9 @@ attach-mode с удалением managed route. При ошибке убеди�
 
 ### **Некорректное имя устройства или интерфейс остаётся после остановки**
 
-`device_name` должен быть пустым для автоматического `/dev/tun` или иметь вид
-`tun<N>`. Backend получает фактическое имя через `TUNGIFNAME` с полным
+Поле plugin `tun_interface` должно быть пустым для автоматического `/dev/tun`
+или иметь вид `tun<N>`; renderer передаёт его upstream как `device_name`.
+Backend получает фактическое имя через `TUNGIFNAME` с полным
 `struct ifreq`, устанавливает `TUNSIFHEAD=0` и удаляет только созданный им
 интерфейс. В create-mode явно заданный `tun<N>` должен быть свободен, иначе
 запуск отклоняется. При `use_existing=true` оператор отвечает за жизненный
@@ -236,6 +237,39 @@ status не доказывает восстановление data plane.
 
 Client rc.d supervisor перезапустит аварийно завершившийся child через 5 секунд,
 но это только восстановление сервиса, а не исправление возможной upstream-утечки.
+
+### **Clean install завершается `client.bound_if: A value is required`**
+
+Это дефект ранней сборки plugin 2.1.0: model-level `Required` блокировал
+миграцию пустой конфигурации до того, как оператор мог выбрать интерфейс.
+Установите итоговый `os-trusttunnel-client-2.1.0.pkg` из release и повторите
+миграцию штатным package mechanism. Не добавляйте `bound_if` прямой правкой
+`/conf/config.xml`.
+
+В итоговом пакете пустая модель мигрирует, но это не разрешает запуск без
+интерфейса: `Apply`/`reconfigure` возвращает `bound_if is required on
+FreeBSD/OPNsense`, пока не выбран существующий физический интерфейс.
+
+Если после `VPN_SS_RECOVERING` новый адрес выбран, но следом появляется
+`unable to get local issuer certificate`, transport failover уже сработал, а
+отказ относится к TLS trust. Сравните фактически materialized chain на всех
+Endpoint, системную проверку `openssl verify` и время запуска каждого process.
+Для публичного certificate сначала исправьте ownership/renewal в
+`os-acme-client` и добавьте post-renew action `trusttunnel server reconfigure`;
+не маскируйте stale runtime chain ручным pin публичного leaf на Client.
+
+При разборе ACME reset различайте каталоги: global reset очищает
+`home/configs/certs/keys/accounts`, но может сохранить `cert-home` с material
+последней выдачи. Ответ API reset `{"result":"OK\n\n"}` является штатным;
+сравнивайте нормализованное значение `OK`. Историю `/conf/backup/` используйте
+только после проверки status, `certRefId`, Trust Store и ожидаемого точного
+набора restart actions в конкретной revision.
+
+Не диагностируйте такой отказ через stop Client: на FreeBSD уничтожение TUN
+может застрять в kernel `if_detach`/`epoch_drain_callbacks`. Сначала верните
+Endpoint, проверяйте recovery по удалённому Client API, входящим TCP sessions
+на secondary Endpoint и реальному трафику. QEMU Guest Agent также не является
+data-plane oracle и не должен быть единственным каналом наблюдения failover.
 
 ### **Sustained transfer даёт `tun<N> Drop`, хотя TCP не повреждён**
 

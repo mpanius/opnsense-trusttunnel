@@ -5,7 +5,7 @@ All notable changes per release. Newest first.
 > Записи ниже описывают результаты соответствующей версии. Они не являются
 > доказательством совместимости текущих FreeBSD 15.1 packages.
 
-## v2.1.0 (2026-09-02, не опубликован)
+## v2.1.0 (2026-09-06)
 
 ### Добавлено
 
@@ -58,6 +58,10 @@ All notable changes per release. Newest first.
   покрывает этот переход.
 - Binary port получил `PORTREVISION=1`, чтобы package manager отличал
   исправленный `trusttunnel-client-1.1.5.r.6_1` от прежней локальной сборки.
+- Чистая установка Client plugin больше не блокируется model validation
+  пустого `bound_if`: модель `0.0.0 -> 2.1.0` мигрирует до настройки, а
+  runtime `Apply`/`reconfigure` по-прежнему требует существующий физический
+  интерфейс и завершается fail-closed без него.
 
 ### Проверено
 
@@ -73,9 +77,19 @@ All notable changes per release. Newest first.
   TCP и UDP DNS прошли через одну сессию. Alias не
   являлся поддоменом main hostname, поскольку этот формат зарезервирован
   upstream под SNI-аутентификацию.
-- Этот результат подтверждает только тестовый стенд. Production deployment,
-  HA, длительная нагрузка и production routing ещё не подтверждены; GitHub
-  Release `v2.1.0` на момент этой записи не создан.
+- На чистой OPNsense `26.7.3_11` подтверждены миграция модели
+  `0.0.0 -> 2.1.0`, TLS/SNI/auth positive и negative cases, штатный restart,
+  TCP/UDP для обеих маршрутизируемых подсетей и нулевые interface errors.
+- Full-duplex тест передал ровно 10 GiB в каждом направлении за 1906,5 секунды
+  с совпавшими SHA256 и нулевыми `Ierrs/Oerrs/Drop`.
+- Controlled HA failover подтвердил recovery branch и выбор secondary, но
+  data plane остановился на TLS trust. Certificate ownership и materialized
+  chain затем исправлены, однако повторный failover после этого не входит в
+  доказательства релиза.
+- Production cutover подтвердил прикладную TCP/UDP матрицу, return path и
+  маршрутизацию через TrustTunnel. Предыдущий путь сохранён для rollback:
+  24-часовой stability window и его окончательное удаление выполняются
+  отдельно и не являются доказательствами этого релиза.
 - Package lifecycle smoke на изолированной OPNsense VM подтвердил, что
   `pkg delete` удаляет derived runtime Endpoint, а uninstall и повторная
   установка сохраняют полный SHA256 `/conf/config.xml` без изменений.

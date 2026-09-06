@@ -57,8 +57,10 @@ deeplink preview + explicit confirmation
 Renderer переводит модель OPNsense в контракт `v1.1.5-rc.6`: top-level
 `vpn_mode`/`exclusions`, секции `[endpoint]` и `[listener.tun]`. Для FreeBSD
 поддерживается только IPv4; `device_name` пуст или соответствует `tun<N>`,
-MTU находится в диапазоне 576–9000 (default модели plugin 1350), а `bound_if` обязателен
-и задаётся отдельно для каждого узла как его физический исходящий интерфейс.
+MTU находится в диапазоне 576–9000 (default модели plugin 1350). Пустой
+`bound_if` разрешён моделью только для clean migration ещё не настроенного
+plugin; runtime validation перед `reconfigure` требует фактический физический
+исходящий интерфейс этого узла и отклоняет пустое или отсутствующее имя.
 Изменение системного DNS запрещено:
 `change_system_dns = false`. При `use_existing = false` имя должно быть пустым
 или указывать на свободный `tun<N>`; backend владеет созданным интерфейсом и

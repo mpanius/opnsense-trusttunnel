@@ -1,8 +1,9 @@
 # Установка на OPNsense
 
-Текущая цель совместимости — OPNsense 26.7 на FreeBSD 15.1 amd64. До
-публикации проверенного GitHub Release установка выполняется из локально
-собранных пакетов. Публичного подписанного pkg-репозитория пока нет.
+Текущая цель совместимости — OPNsense 26.7 на FreeBSD 15.1 amd64. Проверенные
+пакеты и `SHA256SUMS` доступны в
+[GitHub Release v2.1.0](https://github.com/mpanius/opnsense-trusttunnel/releases/tag/v2.1.0).
+Публичного подписанного pkg-репозитория пока нет.
 
 ## Предварительные условия
 
@@ -13,6 +14,12 @@
 - client: `trusttunnel-client-1.1.5.r.6_1.pkg`,
   `os-trusttunnel-client-2.1.0.pkg`;
 - резервная копия конфигурации тестового firewall.
+
+До sustained-теста снимите `sysctl net.link.ifqmaxlen` и counters TUN. Если
+нагрузка воспроизводимо даёт `Drop`, проверенное для этого релиза значение
+`1024` задаётся как boot-time tunable штатным OPNsense API. Его применение
+требует отдельного maintenance window, штатного reboot и пересоздания TUN;
+не меняйте tunable во время активной передачи.
 
 Соберите бинарные пакеты по [`../freebsd-port/README.md`](../freebsd-port/README.md).
 OPNsense-плагины собираются в штатном дереве `opnsense/plugins`, куда каталоги
@@ -63,6 +70,29 @@ configctl webgui restart
 Установка пакета может мигрировать модель OPNsense. Сначала выполняйте её на
 тестовой VM; локальный E2E не является разрешением на production deployment.
 
+## Обновление
+
+Перед обновлением сохраните exact OPNsense backup через Backup API, его
+SHA256 и предыдущие `.pkg`. Сверьте новые файлы с `SHA256SUMS`, затем в
+maintenance window обновите binary package и соответствующий plugin package:
+
+```sh
+# endpoint
+pkg add -f ./trusttunnel-1.1.0.pkg ./os-trusttunnel-2.1.0.pkg
+configctl trusttunnel server reconfigure
+
+# либо client
+pkg add -f ./trusttunnel-client-1.1.5.r.6_1.pkg \
+  ./os-trusttunnel-client-2.1.0.pkg
+configctl trusttunnelclient client reconfigure
+```
+
+`-f` нужен для замены same-version package исправленной сборкой. После
+обновления проверьте `pkg info`, status supervisor/child, созданный TUN,
+маршруты, TCP, UDP DNS и interface counters. При любом отказе используйте
+сохранённые предыдущие пакеты и exact pre-change backup по процедуре отката
+ниже.
+
 ## Настройка клиента
 
 - `tun_interface`: пустая строка для нового интерфейса или свободный `tun<N>`;
@@ -79,6 +109,13 @@ TUN (`use_existing = false`) штатный stop удаляет интерфей
 чужого интерфейса, переключает packet-header mode через `TUNSIFHEAD=0` и
 снимает только добавленные им managed routes.
 
+Пустой `bound_if` допустим на уровне модели только для clean install и
+миграции ещё не настроенного plugin. `Apply`/`reconfigure` fail-closed
+отклоняет пустое значение сообщением `bound_if is required on
+FreeBSD/OPNsense`, а несуществующий интерфейс — отдельной ошибкой. До запуска
+выберите фактический интерфейс этого узла; не редактируйте `/conf/config.xml`
+вручную.
+
 ## Сертификат и WAN-правило Endpoint
 
 Plugin не импортирует сертификаты и не создаёт firewall rules самостоятельно.
@@ -90,6 +127,17 @@ Plugin не импортирует сертификаты и не создаёт
    отсутствии добавьте минимальный TCP rule на фактические address/port через
    `/api/firewall/filter/addRule` и выполните `/api/firewall/filter/apply`;
 3. сохраните UUID правила для отдельного API-only rollback.
+
+Для публичного сертификата используйте `os-acme-client` как owner выпуска и
+renewal. Настройте account и DNS-01 validation, выпустите certificate и
+проверьте `statusCode=200`, SAN и chain в Trust Store. Только после успешной
+первичной выдачи включите cron auto-renewal. Создайте action типа `System or
+Plugin Command` с командой `trusttunnel server reconfigure`, привяжите её к
+certificate и один раз примените Endpoint в отдельном maintenance window.
+После renewal action повторно materialize chain из OPNsense Trust Store и
+загрузит её в Endpoint. Поле Client `certificate_pem` оставляйте пустым для
+публично доверенной цепочки; оно предназначено для частного CA, а не для
+ручного закрепления регулярно обновляемого публичного leaf.
 
 Перед каждым POST обязательны fresh backup, read-back, exact redacted diff и
 явное подтверждение. Не редактируйте `/conf/config.xml` и не считайте package
