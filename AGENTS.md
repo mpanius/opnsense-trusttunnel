@@ -60,3 +60,9 @@ OPNsense 26.7 VM. Upstream `v1.1.5-rc.6` не реализует FreeBSD TUN, н
 мотивацию, компонент, команды и результаты проверок; для UI приложите
 скриншоты, для data plane — доказательство трафика. Никогда не добавляйте
 ключи, секреты, внутренние адреса, caches или build logs.
+
+## Подготовка Orca worktree
+
+- Работайте в выделенной Orca ветке и текущем worktree; не создавайте вложенный worktree и не переключайте общий checkout. Перед правками выполните `cdrv worktree setup` из корня.
+- Это плагины OPNsense и FreeBSD-порты, не веб-сайт. На macOS для редактирования checkout дополнительная установка не нужна; сборка требует совместимый FreeBSD builder и отдельный Conan cache. Точные шаги приведены в [`freebsd-port/README.md`](freebsd-port/README.md).
+- Не запускайте bootstrap-builder, `make package`, установку пакетов, сетевые smoke-тесты или операции с OPNsense автоматически при подготовке worktree.
